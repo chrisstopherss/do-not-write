@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup B - Research Workstation</title>
+<style>
+:root{--bg:#0f1115;--panel:#161a21;--panel2:#1b2029;--line:#2a313d;--text:#d8dee9;--muted:#8b95a7;--accent:#4cc2ff;--accent-t:#03121c;--ok:#5ad48a;--warn:#f2b84b;--err:#ff7b72;--syn:#b79cff;--mono:Consolas,"Cascadia Mono","SF Mono",monospace}
+:root[data-theme=light]{--bg:#eef1f5;--panel:#fff;--panel2:#f4f6f9;--line:#d5dbe4;--text:#1b2230;--muted:#5d687a;--accent:#0b6cb0;--accent-t:#fff;--ok:#1a7f45;--warn:#8a5a00;--err:#b42318;--syn:#5b3fa0}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:13px/1.45 "Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column}
+.mock-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 12px;background:#000;color:#ccc;font-size:12px}
+.mock-bar button{background:#222;color:#ccc;border:1px solid #444;border-radius:4px;padding:2px 8px;cursor:pointer;font:inherit}
+.mock-bar button[aria-pressed=true]{background:#ccc;color:#000}
+.mock-bar .note{margin-left:auto;opacity:.7}
+.top{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+.top h1{font-size:13px;margin:0;font-weight:600;letter-spacing:.4px;text-transform:uppercase}
+.tabs{display:flex;gap:2px;margin-left:12px}
+.tabs a{padding:5px 12px;color:var(--muted);text-decoration:none;border-radius:4px}
+.tabs a[aria-current=page]{background:var(--panel2);color:var(--text);box-shadow:inset 0 -2px 0 var(--accent)}
+.chip{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--syn);color:var(--syn);font-weight:600;letter-spacing:.3px}
+.spacer{margin-left:auto}
+.ws{flex:1;min-height:0;display:grid;grid-template-columns:280px 1fr 320px;gap:1px;background:var(--line)}
+.pane{background:var(--panel);overflow:auto;padding:12px 14px;min-width:0}
+.pane h2{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:0 0 8px;font-weight:600}
+.pane section+section{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.cat{display:grid;grid-template-columns:auto 1fr auto;gap:2px 8px;align-items:center;margin-bottom:8px}
+.cat label{font-weight:600;font-size:12.5px}
+.cat .rate{font-family:var(--mono);color:var(--accent);font-size:12px}
+.cat small{grid-column:2 / 4;color:var(--muted);font-size:11px}
+.cat input[type=range]{grid-column:1 / 4;width:100%;accent-color:var(--accent)}
+input[type=checkbox]{accent-color:var(--accent)}
+input[type=text],select{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:5px 7px;font:12px var(--mono)}
+button,.btn{font:inherit}
+.btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:5px 12px;cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-t);border-color:var(--accent);font-weight:600}
+.btn.danger{border-color:var(--err);color:var(--err)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.editor{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:14px 16px;font:15px/1.7 var(--mono);white-space:pre-wrap;min-height:220px}
+.editor.diff ins{background:rgba(90,212,138,.2);color:var(--ok);text-decoration:none}
+.editor.diff del{background:rgba(255,123,114,.2);color:var(--err)}
+.cursor{display:inline-block;width:8px;height:1.1em;background:var(--accent);vertical-align:text-bottom}
+.paused .cursor{opacity:.3}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:12px}
+.kv dt{color:var(--muted)}.kv dd{margin:0;text-align:right;font-family:var(--mono)}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden}.bar>i{display:block;height:100%;background:var(--accent)}
+.timeline{position:relative;height:56px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;margin:8px 0}
+.timeline i{position:absolute;bottom:6px;width:3px;border-radius:1px}
+.timeline .now{position:absolute;top:0;bottom:0;width:1px;background:var(--accent)}
+.log{font:11.5px/1.5 var(--mono)}
+.log div{display:grid;grid-template-columns:48px 82px 1fr;gap:6px;padding:2px 0;border-bottom:1px dashed var(--line)}
+.log .t{color:var(--muted)}.log .k{color:var(--syn)}
+.metric{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line)}
+.metric b{font-family:var(--mono)}
+.tag{font-size:10px;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;font-weight:600}
+.tag.sim{background:rgba(183,156,255,.18);color:var(--syn)}.tag.obs{background:rgba(76,194,255,.18);color:var(--accent)}.tag.heur{background:rgba(242,184,75,.18);color:var(--warn)}
+.banner{padding:8px 10px;border-radius:5px;margin-bottom:10px;font-size:12.5px;border:1px solid}
+.banner.err{background:rgba(255,123,114,.1);border-color:var(--err);color:var(--err)}
+.banner.ok{background:rgba(90,212,138,.1);border-color:var(--ok);color:var(--ok)}
+.status{display:flex;gap:18px;align-items:center;padding:4px 14px;background:var(--panel);border-top:1px solid var(--line);font:11.5px var(--mono);color:var(--muted)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:var(--muted)}
+.run .dot{background:var(--ok)}.pau .dot{background:var(--warn)}.err .dot{background:var(--err)}
+.ctrl{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap}
+.seg{display:flex;gap:4px;flex-wrap:wrap}.seg button{flex:1;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:4px 6px;cursor:pointer}
+.seg button[aria-checked=true]{border-color:var(--accent);color:var(--accent);font-weight:600}
+@media (max-width:1000px){.ws{grid-template-columns:240px 1fr}.ws>.pane:last-child{display:none}}
+</style>
+</head>
+<body>
+<div class="mock-bar" role="toolbar" aria-label="Mockup state switcher">
+  <strong>Mockup B &middot; Research workstation</strong> State:
+  <button data-set-state="empty" aria-pressed="true">Empty</button>
+  <button data-set-state="ready" aria-pressed="false">Ready</button>
+  <button data-set-state="running" aria-pressed="false">Running</button>
+  <button data-set-state="paused" aria-pressed="false">Paused</button>
+  <button data-set-state="completed" aria-pressed="false">Completed</button>
+  <button data-set-state="error" aria-pressed="false">Error</button>
+  <button id="theme" aria-pressed="false">Toggle theme</button>
+  <span class="note">Illustrative values only, not measurements.</span>
+</div>
+
+<div class="top">
+  <h1>WPL / Research</h1>
+  <nav class="tabs" aria-label="Primary"><a href="#" aria-current="page">Session</a><a href="#">Experiments</a><a href="#">History</a><a href="#">Settings</a></nav>
+  <span class="chip spacer">ALL OUTPUT SYNTHETIC</span><span class="chip" style="border-color:var(--ok);color:var(--ok)">OFFLINE</span>
+</div>
+
+<div class="ws">
+  <!-- LEFT: config -->
+  <aside class="pane" aria-label="Session configuration">
+    <section>
+      <h2>Duration</h2>
+      <div class="seg" role="radiogroup" aria-label="Duration"><button role="radio" aria-checked="false">30m</button><button role="radio" aria-checked="true">1h</button><button role="radio" aria-checked="false">2h</button><button role="radio" aria-checked="false">Custom</button></div>
+      <p class="muted" style="color:var(--muted);margin:6px 0 0">Deadline grace for finishing a sentence: <b style="font-family:var(--mono)">5:00</b> max</p>
+    </section>
+    <section>
+      <h2>Seed</h2>
+      <input type="text" value="4812093" aria-label="Random seed"> <label style="display:block;margin-top:4px;color:var(--muted)"><input type="checkbox" checked> Auto-generate each run</label>
+      <p style="color:var(--muted);margin:6px 0 0;font-size:11.5px">PRNG: PCG64 &middot; engine v0.1.0</p>
+    </section>
+    <section>
+      <h2>Error categories</h2>
+      <div class="cat"><input type="checkbox" checked aria-label="Substitutions on"><label>Substitution</label><span class="rate">1.5%</span><input type="range" min="0" max="10" step="0.1" value="1.5" aria-label="Substitution rate"><small>per eligible letter position</small></div>
+      <div class="cat"><input type="checkbox" checked aria-label="Missing or duplicated on"><label>Missing / duplicate</label><span class="rate">0.8%</span><input type="range" min="0" max="10" step="0.1" value="0.8" aria-label="Missing or duplicated rate"><small>per eligible letter position</small></div>
+      <div class="cat"><input type="checkbox" aria-label="Misspellings on"><label>Misspelling</label><span class="rate">0.0%</span><input type="range" min="0" max="10" step="0.1" value="0" aria-label="Misspelling rate"><small>per eligible word</small></div>
+      <div class="cat"><input type="checkbox" checked aria-label="Corrections on"><label>Correction</label><span class="rate">40%</span><input type="range" min="0" max="100" step="1" value="40" aria-label="Correction rate"><small>of introduced errors that get fixed</small></div>
+      <a href="#" style="color:var(--accent)">4 more categories&hellip;</a>
+    </section>
+    <section>
+      <h2>Reproduce</h2>
+      <div class="ctrl"><button class="btn">Save scenario&hellip;</button><button class="btn">Load&hellip;</button></div>
+    </section>
+  </aside>
+
+  <!-- CENTER: editor -->
+  <main class="pane" aria-label="Writing area">
+    <div class="banner err" data-show="error" role="alert"><b>Database write failed</b> (permission denied on data folder). Session paused safely. <a href="#" style="color:inherit">Change location</a> &middot; <a href="#" style="color:inherit">Retry</a></div>
+    <div class="banner ok" data-show="completed"><b>Complete.</b> Ended 57:40 of 60:00. Deadline mid-sentence; finished within grace limit (2:10 of 5:00 used).</div>
+
+    <div data-show="empty" class="editor" style="display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);font:13px 'Segoe UI',sans-serif">
+      <div>No source text loaded.<br>Paste (Ctrl+V) or import a .txt / .md file.<br><br><button class="btn primary">Import file&hellip;</button> <button class="btn">Paste</button></div>
+    </div>
+    <div data-show="ready error" class="editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Source text">The committee met on Tuesday to review the quarterly findings. Three proposals were discussed, and a decision was deferred until the next meeting.</div>
+    <div data-show="running paused" class="editor" aria-label="Synthetic output so far">The committee met on Tuesday to review the quarterly findings. Three proposals were discussed, and a deci<span class="cursor" aria-hidden="true"></span></div>
+    <div data-show="completed" class="editor diff" aria-label="Original vs final">The committee met on Tuesday to review the quarterly <del>finding</del><ins>findings</ins>. Three proposals were discussed, and a decision was deferred until the next meeting.</div>
+
+    <div data-show="running paused completed error">
+      <div class="timeline" role="img" aria-label="Event density timeline">
+        <i style="left:6%;height:20px;background:var(--syn)"></i><i style="left:11%;height:12px;background:var(--syn)"></i><i style="left:19%;height:30px;background:var(--warn)"></i><i style="left:27%;height:14px;background:var(--syn)"></i><i style="left:33%;height:22px;background:var(--syn)"></i><i style="left:40%;height:34px;background:var(--warn)"></i>
+        <span class="now" style="left:42%" data-show="running paused"></span>
+      </div>
+      <div class="bar" role="progressbar" aria-valuenow="42" aria-valuemin="0" aria-valuemax="100" aria-label="Progress"><i style="width:42%"></i></div>
+    </div>
+    <div class="ctrl" data-show="running paused error">
+      <button class="btn" data-show="running">Pause</button>
+      <button class="btn primary" data-show="paused error">Resume</button>
+      <button class="btn danger">Cancel&hellip;</button>
+    </div>
+    <div class="ctrl" data-show="ready"><button class="btn primary">Start session</button><button class="btn">Preview transformations</button></div>
+    <div class="ctrl" data-show="completed"><button class="btn primary">Export&hellip;</button><button class="btn">Re-run same seed</button><button class="btn">Compare&hellip;</button></div>
+  </main>
+
+  <!-- RIGHT: events + analytics -->
+  <aside class="pane" aria-label="Events and analytics">
+    <section>
+      <h2>Session</h2>
+      <dl class="kv"><dt>Elapsed</dt><dd data-show="empty ready">--:--</dd><dd data-show="running paused error">25:12</dd><dd data-show="completed">57:40</dd>
+      <dt>Remaining</dt><dd data-show="empty ready">--:--</dd><dd data-show="running paused error">34:48</dd><dd data-show="completed">00:00</dd>
+      <dt>Next event</dt><dd data-show="running">~4 s</dd><dd data-show="empty ready paused error completed">&mdash;</dd></dl>
+    </section>
+    <section data-show="running paused completed error">
+      <h2>Event log <span class="tag sim">SIMULATED</span></h2>
+      <div class="log">
+        <div><span class="t">25:08</span><span class="k">substitute</span><span>decision&rarr;decisoin</span></div>
+        <div><span class="t">24:51</span><span class="k">correct</span><span>fixed "teh"</span></div>
+        <div><span class="t">24:40</span><span class="k">substitute</span><span>the&rarr;teh</span></div>
+        <div><span class="t">23:02</span><span class="k">repeat</span><span>"the the"</span></div>
+      </div>
+    </section>
+    <section>
+      <h2>Analytics</h2>
+      <div class="metric"><span>Characters <span class="tag obs">COUNTED</span></span><b data-show="empty">0</b><b data-show="ready running paused error completed">184</b></div>
+      <div class="metric"><span>Errors applied <span class="tag sim">SIM</span></span><b data-show="empty ready">&mdash;</b><b data-show="running paused error">4</b><b data-show="completed">9</b></div>
+      <div class="metric"><span>Repeated phrases <span class="tag heur">HEURISTIC</span></span><b data-show="empty ready">&mdash;</b><b data-show="running paused error completed">1</b></div>
+      <p style="color:var(--muted);font-size:11.5px">Heuristics are observations, not proof of authorship or origin.</p>
+    </section>
+  </aside>
+</div>
+
+<div class="status" id="status"><span><span class="dot"></span><span id="st">IDLE</span></span><span>DB: %LOCALAPPDATA%\WritingProcessLab\data.db</span><span>External typing: disabled</span><span class="spacer" style="margin-left:auto">v0.1.0</span></div>
+
+<script>
+const btns=[...document.querySelectorAll('[data-set-state]')];
+const names={empty:'IDLE',ready:'READY',running:'RUNNING',paused:'PAUSED',completed:'COMPLETE',error:'ERROR'};
+function setState(s){
+  document.body.dataset.state=s;
+  btns.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.setState===s)));
+  document.querySelectorAll('[data-show]').forEach(el=>{el.hidden=!el.dataset.show.split(' ').includes(s)});
+  document.body.classList.toggle('paused',s==='paused');
+  const st=document.getElementById('status');st.className='status '+({running:'run',paused:'pau',error:'err'}[s]||'');
+  document.getElementById('st').textContent=names[s];
+}
+btns.forEach(b=>b.addEventListener('click',()=>setState(b.dataset.setState)));
+document.getElementById('theme').addEventListener('click',()=>{const r=document.documentElement;r.dataset.theme=r.dataset.theme==='light'?'dark':'light'});
+const q=new URLSearchParams(location.search);if(q.get('theme'))document.documentElement.dataset.theme=q.get('theme');
+setState(q.get('state')||'empty');
+</script>
+</body>
+</html>

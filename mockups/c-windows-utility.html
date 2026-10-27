@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup C - Windows Utility</title>
+<style>
+:root{--bg:#f3f3f3;--nav:#ebebeb;--card:#fff;--line:#e0e0e0;--text:#1a1a1a;--muted:#616161;--accent:#005fb8;--accent-t:#fff;--accent-soft:#e3effa;--ok:#0f7b0f;--ok-bg:#dff6dd;--warn:#9d5d00;--warn-bg:#fff4ce;--err:#c42b1c;--err-bg:#fde7e9;--syn:#6b3fb5;--syn-bg:#ede4fa}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#202020;--nav:#1c1c1c;--card:#2b2b2b;--line:#3a3a3a;--text:#f3f3f3;--muted:#b5b5b5;--accent:#60cdff;--accent-t:#001a2b;--accent-soft:#1d3447;--ok:#6ccb5f;--ok-bg:#1b3a1b;--warn:#fce100;--warn-bg:#433519;--err:#ff99a4;--err-bg:#442726;--syn:#c9b0f5;--syn-bg:#33284a}}
+:root[data-theme=dark]{--bg:#202020;--nav:#1c1c1c;--card:#2b2b2b;--line:#3a3a3a;--text:#f3f3f3;--muted:#b5b5b5;--accent:#60cdff;--accent-t:#001a2b;--accent-soft:#1d3447;--ok:#6ccb5f;--ok-bg:#1b3a1b;--warn:#fce100;--warn-bg:#433519;--err:#ff99a4;--err-bg:#442726;--syn:#c9b0f5;--syn-bg:#33284a}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 "Segoe UI Variable","Segoe UI",system-ui,sans-serif;height:100vh;display:flex;flex-direction:column}
+.mock-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 12px;background:#111;color:#ddd;font-size:12px}
+.mock-bar button{background:#2a2a2a;color:#ddd;border:1px solid #444;border-radius:4px;padding:2px 8px;cursor:pointer;font:inherit}
+.mock-bar button[aria-pressed=true]{background:#ddd;color:#111}.mock-bar .note{margin-left:auto;opacity:.7}
+.app{flex:1;min-height:0;display:grid;grid-template-columns:232px 1fr}
+nav.side{background:var(--nav);padding:12px 8px;display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--line)}
+nav.side h1{font-size:13px;margin:6px 12px 14px;font-weight:600}
+nav.side a{display:flex;gap:10px;align-items:center;padding:8px 12px;border-radius:6px;color:var(--text);text-decoration:none;position:relative}
+nav.side a[aria-current=page]{background:var(--card)}
+nav.side a[aria-current=page]::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:2px;background:var(--accent)}
+nav.side a:hover{background:var(--line)}
+nav.side .ico{width:18px;text-align:center;font-size:15px}
+nav.side .foot{margin-top:auto;font-size:12px;color:var(--muted);padding:8px 12px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+main{overflow:auto;padding:20px 28px 32px}
+main>header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+main h2{font-size:24px;font-weight:600;margin:0}
+.pill{font-size:12px;padding:2px 10px;border-radius:99px;background:var(--syn-bg);color:var(--syn);font-weight:600}
+.cols{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr);gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin-bottom:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.card h3{font-size:14px;margin:0 0 4px;font-weight:600}.card .sub{color:var(--muted);font-size:12.5px;margin:0 0 12px}
+.editor{border:1px solid var(--line);border-radius:6px;padding:12px 14px;min-height:240px;font:15px/1.65 "Segoe UI",sans-serif;white-space:pre-wrap;background:var(--bg)}
+.editor.center{display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);border-style:dashed}
+.cursor{display:inline-block;width:2px;height:1.1em;background:var(--accent);vertical-align:text-bottom}.paused .cursor{opacity:.35}
+.btn{font:inherit;padding:6px 16px;border-radius:4px;border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer}
+.btn:hover{background:var(--bg)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-t);font-weight:600}.btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{color:var(--err);border-color:var(--err)}.btn:disabled{opacity:.45;cursor:not-allowed}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.stats{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:8px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{font:inherit;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer}
+.seg button[aria-checked=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+.sw{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)}
+.sw:last-child{border:0}.sw small{display:block;color:var(--muted);font-size:12px}
+.sw .r{display:flex;align-items:center;gap:10px}.sw input[type=number]{width:64px;font:inherit;padding:3px 6px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:4px}
+.switch{appearance:none;width:40px;height:20px;border-radius:10px;border:1px solid var(--muted);background:transparent;position:relative;cursor:pointer;margin:0}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:var(--muted);transition:left .1s}
+.switch:checked{background:var(--accent);border-color:var(--accent)}.switch:checked::after{left:23px;background:var(--accent-t)}
+.bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden}.bar>i{display:block;height:100%;background:var(--accent)}
+.big{font:600 28px/1 "Segoe UI Variable Display","Segoe UI",sans-serif;font-variant-numeric:tabular-nums}
+.stat{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}.stat span{color:var(--muted);font-size:12.5px}
+.infobar{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-radius:6px;margin-bottom:14px;font-size:13px}
+.infobar.err{background:var(--err-bg);color:var(--err)}.infobar.ok{background:var(--ok-bg);color:var(--ok)}.infobar.warn{background:var(--warn-bg);color:var(--warn)}
+.ev{display:grid;grid-template-columns:48px 1fr;gap:8px;font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--line)}.ev .t{color:var(--muted);font-variant-numeric:tabular-nums}
+.ev em{font-style:normal;background:var(--syn-bg);color:var(--syn);padding:0 5px;border-radius:3px;font-size:11px;margin-right:4px}
+.diff ins{background:var(--ok-bg);color:var(--ok);text-decoration:none}.diff del{background:var(--err-bg);color:var(--err)}
+@media (max-width:900px){.cols{grid-template-columns:1fr}.app{grid-template-columns:64px 1fr}nav.side a span:not(.ico),nav.side h1,nav.side .foot{display:none}}
+</style>
+</head>
+<body>
+<div class="mock-bar" role="toolbar" aria-label="Mockup state switcher">
+  <strong>Mockup C &middot; Windows utility</strong> State:
+  <button data-set-state="empty" aria-pressed="true">Empty</button><button data-set-state="ready" aria-pressed="false">Ready</button><button data-set-state="running" aria-pressed="false">Running</button><button data-set-state="paused" aria-pressed="false">Paused</button><button data-set-state="completed" aria-pressed="false">Completed</button><button data-set-state="error" aria-pressed="false">Error</button><button id="theme" aria-pressed="false">Toggle theme</button>
+  <span class="note">Illustrative values only, not measurements.</span>
+</div>
+
+<div class="app">
+  <nav class="side" aria-label="Primary">
+    <h1>Writing Process Lab</h1>
+    <a href="#" aria-current="page"><span class="ico">&#9998;</span><span>New session</span></a>
+    <a href="#"><span class="ico">&#9654;</span><span>Active session</span></a>
+    <a href="#"><span class="ico">&#10003;</span><span>Results</span></a>
+    <a href="#"><span class="ico">&#128200;</span><span>Research</span></a>
+    <a href="#"><span class="ico">&#128368;</span><span>History</span></a>
+    <a href="#" style="margin-top:auto"><span class="ico">&#9881;</span><span>Settings</span></a>
+    <div class="foot">Offline &middot; v0.1.0</div>
+  </nav>
+
+  <main>
+    <header><h2 data-show="empty ready error">New session</h2><h2 data-show="running paused">Active session</h2><h2 data-show="completed">Results</h2><span class="pill">Synthetic output</span></header>
+
+    <div class="infobar err" data-show="error" role="alert"><span>&#9888;</span><div><strong>Couldn't save to the data folder.</strong> It may be full or read-only. Your text is safe in the editor. <a href="#" style="color:inherit">Change folder</a></div></div>
+    <div class="infobar ok" data-show="completed"><span>&#10003;</span><div><strong>Session complete</strong> at 57:40 of 60:00. Deadline fell mid-sentence; finished within the 5:00 grace limit.</div></div>
+
+    <div class="cols">
+      <div>
+        <div class="card">
+          <h3 data-show="empty ready error">Source text</h3><h3 data-show="running paused">Output so far</h3><h3 data-show="completed">Original vs final</h3>
+          <p class="sub" data-show="empty ready error">Your original text is never modified.</p>
+          <div class="editor center" data-show="empty"><div>Nothing here yet.<br>Paste text or import a file.<div class="btns" style="justify-content:center"><button class="btn primary">Paste</button><button class="btn">Import file&hellip;</button></div></div></div>
+          <div class="editor" data-show="ready error" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Source text">The committee met on Tuesday to review the quarterly findings. Three proposals were discussed, and a decision was deferred until the next meeting.</div>
+          <div class="editor" data-show="running paused" aria-label="Synthetic output so far">The committee met on Tuesday to review the quarterly findings. Three proposals were discussed, and a deci<span class="cursor" aria-hidden="true"></span></div>
+          <div class="editor diff" data-show="completed">The committee met on Tuesday to review the quarterly <del>finding</del><ins>findings</ins>. Three proposals were discussed, and a decision was deferred until the next meeting.</div>
+          <div class="stats" data-show="ready error"><span>184 characters</span><span>30 words</span><span>3 sentences</span><span>2 paragraphs</span></div>
+          <div class="btns" data-show="running"><button class="btn">Pause</button><button class="btn danger">Cancel&hellip;</button></div>
+          <div class="btns" data-show="paused"><button class="btn primary">Resume</button><button class="btn danger">Cancel&hellip;</button></div>
+          <div class="btns" data-show="completed"><button class="btn primary">Export&hellip;</button><button class="btn">Re-run same seed</button><button class="btn">Compare&hellip;</button></div>
+        </div>
+        <div class="card" data-show="running paused completed">
+          <h3>Recent simulated events</h3><p class="sub">Generated by the simulation engine; not a record of human activity.</p>
+          <div class="ev"><span class="t">25:08</span><span><em>substitute</em>decision &rarr; decisoin</span></div>
+          <div class="ev"><span class="t">24:51</span><span><em>correct</em>fixed "teh" &rarr; "the"</span></div>
+          <div class="ev"><span class="t">23:02</span><span><em>repeat</em>"the the"</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card" data-show="running paused">
+          <div class="stat"><span>Elapsed</span><div class="big">25:12</div></div>
+          <div class="stat"><span>Remaining</span><div class="big">34:48</div></div>
+          <div class="bar" role="progressbar" aria-valuenow="42" aria-valuemin="0" aria-valuemax="100" aria-label="Progress"><i style="width:42%"></i></div>
+          <p class="sub" style="margin-top:8px" data-show="running">42% &middot; next event in ~4 s</p><p class="sub" style="margin-top:8px" data-show="paused">42% &middot; paused, clock stopped</p>
+        </div>
+        <div class="card" data-show="empty ready error">
+          <h3>Duration</h3><p class="sub">Up to 24 hours.</p>
+          <div class="seg" role="radiogroup" aria-label="Duration"><button role="radio" aria-checked="false">30 min</button><button role="radio" aria-checked="true">1 hour</button><button role="radio" aria-checked="false">2 hours</button><button role="radio" aria-checked="false">Custom</button></div>
+          <p class="sub" style="margin-top:12px" data-show="ready error">Estimate: finishes by 14:32, up to 5:00 extra to finish a sentence.</p>
+        </div>
+        <div class="card">
+          <h3>Mistakes</h3><p class="sub">Experimental transformations. Each rate has a defined denominator.</p>
+          <div class="sw"><div>Substitution<small>% of eligible letter positions</small></div><div class="r"><input type="number" value="1.5" step="0.1" aria-label="Substitution rate percent"><input class="switch" type="checkbox" role="switch" checked aria-label="Substitution"></div></div>
+          <div class="sw"><div>Misspelling<small>% of eligible words</small></div><div class="r"><input type="number" value="0.0" step="0.1" aria-label="Misspelling rate percent"><input class="switch" type="checkbox" role="switch" aria-label="Misspelling"></div></div>
+          <div class="sw"><div>Correction<small>% of introduced errors fixed</small></div><div class="r"><input type="number" value="40" aria-label="Correction rate percent"><input class="switch" type="checkbox" role="switch" checked aria-label="Correction"></div></div>
+          <a href="#" style="font-size:13px;color:var(--accent)">All categories and seed&hellip;</a>
+        </div>
+        <div class="card" data-show="empty ready error">
+          <button class="btn primary" style="width:100%;padding:10px" data-show="ready error">Start session</button>
+          <button class="btn primary" style="width:100%;padding:10px" data-show="empty" disabled>Start session</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const btns=[...document.querySelectorAll('[data-set-state]')];
+function setState(s){
+  document.body.dataset.state=s;
+  btns.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.setState===s)));
+  document.querySelectorAll('[data-show]').forEach(el=>{el.hidden=!el.dataset.show.split(' ').includes(s)});
+  document.body.classList.toggle('paused',s==='paused');
+}
+btns.forEach(b=>b.addEventListener('click',()=>setState(b.dataset.setState)));
+document.getElementById('theme').addEventListener('click',()=>{const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'});
+const q=new URLSearchParams(location.search);if(q.get('theme'))document.documentElement.dataset.theme=q.get('theme');
+setState(q.get('state')||'empty');
+</script>
+</body>
+</html>
