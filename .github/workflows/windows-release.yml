@@ -34,10 +34,14 @@ jobs:
       - name: Self-test the built executables
         shell: pwsh
         run: |
-          & .\dist\WritingProcessLab\WritingProcessLab.exe --selftest
-          if ($LASTEXITCODE -ne 0) { throw "one-folder selftest failed" }
-          & .\dist-portable\WritingProcessLab-portable.exe --selftest
-          if ($LASTEXITCODE -ne 0) { throw "portable selftest failed" }
+          # Windowed exes do not block PowerShell or expose a console, so run them with -Wait and read their result file.
+          foreach ($exe in @(".\dist\WritingProcessLab\WritingProcessLab.exe", ".\dist-portable\WritingProcessLab-portable.exe")) {
+            $out = Join-Path $env:RUNNER_TEMP ("selftest-" + [IO.Path]::GetFileNameWithoutExtension($exe) + ".txt")
+            if (Test-Path $out) { Remove-Item $out }
+            $p = Start-Process -FilePath $exe -ArgumentList "--selftest", "--selftest-out", $out -Wait -PassThru
+            if (Test-Path $out) { Get-Content $out } else { Write-Host "no result file written by $exe" }
+            if ($p.ExitCode -ne 0) { throw "selftest failed for $exe (exit code $($p.ExitCode))" }
+          }
       - name: Build installer
         shell: pwsh
         run: |

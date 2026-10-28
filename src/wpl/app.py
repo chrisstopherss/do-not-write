@@ -22,9 +22,19 @@ def setup_logging(data_dir: Path) -> Path:
     return path
 
 
-def selftest() -> int:
-    """Release check: runs without user interaction against a throwaway data folder. Prints one line per check."""
+def selftest(out_path: str | None = None) -> int:
+    """Release check: runs without user interaction against a throwaway data folder. Prints one line per check.
+    Windowed executables have no console, so results are also written to ``out_path`` when given."""
     import tempfile
+
+    lines: list[str] = []
+
+    def emit(line: str) -> None:
+        lines.append(line)
+        if sys.stdout is not None:
+            print(line)
+        if out_path:
+            Path(out_path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
@@ -38,7 +48,7 @@ def selftest() -> int:
     failures: list[str] = []
 
     def check(name: str, ok: bool) -> None:
-        print(("PASS " if ok else "FAIL ") + name)
+        emit(("PASS " if ok else "FAIL ") + name)
         if not ok:
             failures.append(name)
 
@@ -67,13 +77,20 @@ def selftest() -> int:
         check("main window builds", win.nav.count() == 5)
         win.close()
         db.close()
-    print(f"Writing Process Lab {APP_VERSION} (engine {ENGINE_VERSION}): {'FAILED' if failures else 'all checks passed'}")
+    emit(f"Writing Process Lab {APP_VERSION} (engine {ENGINE_VERSION}): {'FAILED' if failures else 'all checks passed'}")
     return 1 if failures else 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    if "--selftest" in (argv or sys.argv):
-        return selftest()
+    args = argv or sys.argv
+    if "--selftest" in args:
+        out = args[args.index("--selftest-out") + 1] if "--selftest-out" in args and args.index("--selftest-out") + 1 < len(args) else None
+        try:
+            return selftest(out)
+        except Exception as exc:  # noqa: BLE001 - a crash must still produce a failing result file
+            if out:
+                Path(out).write_text(f"FAIL selftest crashed: {type(exc).__name__}: {exc}\n", encoding="utf-8")
+            raise
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     from .ui.main_window import MainWindow

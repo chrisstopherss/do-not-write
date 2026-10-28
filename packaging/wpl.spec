@@ -14,7 +14,9 @@ datas = [
 onefile = os.environ.get("WPL_ONEFILE") == "1"
 # Only the Qt modules the app uses are pulled in; network-capable Qt modules are explicitly excluded.
 excludes = ["PySide6.QtNetwork", "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtQml", "PySide6.QtQuick",
-            "PySide6.QtSql", "PySide6.QtMultimedia", "tkinter", "unittest", "pydoc", "http", "urllib", "xmlrpc", "ftplib", "smtplib"]
+            "PySide6.QtSql", "PySide6.QtMultimedia", "tkinter"]
+# Stdlib modules (urllib, http, ...) are NOT excluded: Python's own pathlib/zipfile import urllib on Windows, and excluding
+# them crashes the exe at startup. "No network" is guaranteed by the app code (enforced by a test), not by stripping modules.
 
 a = Analysis([str(root / "packaging/launcher.py")], pathex=[str(root / "src")], datas=datas, hiddenimports=[], excludes=excludes, noarchive=False)
 pyz = PYZ(a.pure)
