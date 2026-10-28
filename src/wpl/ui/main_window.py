@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import APP_VERSION, ENGINE_VERSION
+from ..live_input import LiveInputError, WindowsInputBackend, WindowTarget
 from ..service import SessionController, analyze_session
 from ..storage.db import Database, StorageError
 from . import theme
@@ -65,8 +66,9 @@ class SettingsPage(QWidget):
         lay.addLayout(row)
         root.addWidget(f)
         f, lay = card("About")
-        lay.addWidget(label(f"Writing Process Lab {APP_VERSION}, simulation engine {ENGINE_VERSION}. External typing into other applications is not "
-                            "implemented. There is no Google account integration and no AI-detector integration.", "muted"))
+        lay.addWidget(label(f"Writing Process Lab {APP_VERSION}, simulation engine {ENGINE_VERSION}. Focused-window input is opt-in, "
+                    "sends synthetic keystrokes to a selected foreground window, and stops when focus changes. "
+                    "There is no Google account integration and no AI-detector integration.", "muted"))
         root.addWidget(f)
         root.addStretch(1)
 
@@ -167,16 +169,37 @@ class MainWindow(QMainWindow):
         for c in self.findChildren(ChartBase):
             c.update()
 
-    def _start(self, text: str, ms: int, seed: int, cfg, label_: str, rhythm=None) -> None:
+    def _start(self, text: str, ms: int, seed: int, cfg, label_: str, rhythm=None, target: WindowTarget | None = None) -> None:
+        input_backend = None
+        if target is not None:
+            try:
+                input_backend = WindowsInputBackend(target)
+                if not input_backend.target_is_valid():
+                    raise LiveInputError("The selected target window is no longer available. Refresh the list and choose again.")
+            except LiveInputError as exc:
+                QMessageBox.warning(self, "Cannot start live writing", str(exc))
+                return
+            answer = QMessageBox.question(self, "Start focused-window input",
+                                          f"Send the configured simulated writing to:\n\n{target.title}\n\n"
+                                          "Place the caret in the intended editable field first. The target must remain focused; "
+                                          "switching to this application pauses and switching elsewhere stops the session.")
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            try:
+                input_backend.activate_target()
+            except LiveInputError as exc:
+                QMessageBox.warning(self, "Cannot activate target window", str(exc))
+                return
         try:
             ctl = SessionController(self.db)
-            ctl.create(text, ms, seed, cfg, label=label_, rhythm=rhythm)
+            ctl.create(text, ms, seed, cfg, label=label_, rhythm=rhythm,
+                       input_mode="focused_window" if input_backend is not None else "internal")
         except (ValueError, StorageError) as exc:  # includes InfeasibleSchedule (a ValueError with an explanation)
             QMessageBox.warning(self, "Cannot start session", str(exc))
             log.error("session start failed: %s", type(exc).__name__)
             return
         self.ctl = ctl
-        self.active.attach(ctl)
+        self.active.attach(ctl, input_backend=input_backend)
         self.nav.setCurrentRow(1)
         self.active.begin()
 

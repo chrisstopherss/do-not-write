@@ -50,7 +50,7 @@ jobs:
         shell: pwsh
         run: |
           choco install innosetup -y --no-progress
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\installer.iss /DAppVersion=0.3.0
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\installer.iss /DAppVersion=0.4.0
       - name: Checksums
         shell: pwsh
         run: |
@@ -59,15 +59,16 @@ jobs:
           Get-ChildItem release\*.exe | ForEach-Object { "$((Get-FileHash $_ -Algorithm SHA256).Hash)  $($_.Name)" } | Out-File release\SHA256SUMS.txt -Encoding ascii
       - uses: actions/upload-artifact@v4
         with: { name: windows-release, path: release/ }
-      - name: Publish GitHub release v0.3.0
+      - name: Publish GitHub release v0.4.0
         if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/claude/festive-noether-hy4zbm'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v0.3.0' }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v0.4.0' }}
           target_commitish: ${{ github.sha }}
-          name: Writing Process Lab 0.3.0
+          name: Writing Process Lab 0.4.0
           files: release/*
           generate_release_notes: true
           body: |
-            Windows build of Writing Process Lab. Unsigned: Windows SmartScreen will warn. Verify downloads against SHA256SUMS.txt.
+            Writing Process Lab 0.4.0 adds opt-in focused-window live writing, Unicode event input, focus-change safeguards, and session JSON/CSV exports.
+            Unsigned: Windows SmartScreen will warn. Verify downloads against SHA256SUMS.txt.
             `WritingProcessLab-Setup-*.exe` is the installer; `WritingProcessLab-portable.exe` runs without installing.

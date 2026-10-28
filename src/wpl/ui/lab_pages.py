@@ -905,7 +905,7 @@ EVENT_TABLE = [
     ["Crash / unclean exit", "Session status", "Detected at next start", "Status field and progress counter only", "Until you delete the session"],
     ["paste / import (captured)", "Not collected by this version", "-", "The app never reads the clipboard except when you press Paste in New session; that text becomes the session's source text and is not logged as an event", "-"],
     ["cursor_move", "Not collected by this version", "-", "-", "-"],
-    ["external input", "Not implemented", "-", "No external typing or window integration exists", "-"],
+    ["focused-window input", "SIMULATED (engine) + real session controls", "Only after explicit opt-in, target selection and confirmation", "Synthetic event text is sent to the selected foreground window; focus changes pause or stop. Target handles and received-field contents are not stored", "Until you delete the session"],
     ["Captured keystrokes", "Not collected by this version", "-", "Nothing records keyboard input in any application", "-"],
 ]
 

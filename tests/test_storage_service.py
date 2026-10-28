@@ -153,6 +153,16 @@ def test_recovery_refuses_mismatched_events(db):
         SessionController.recover(db, sid)
 
 
+def test_focused_window_session_requires_reselection_after_restart(db):
+    c = SessionController(db, FakeClock())
+    sid = c.create(SAMPLE, 30 * 60_000, 7, SimConfig(MistakeConfig.default()), input_mode="focused_window")
+    c.start()
+    db.update_session(sid, status="interrupted")
+    assert '"input_mode": "focused_window"' in db.get_session(sid)["config_json"]
+    with pytest.raises(StorageError, match="reselect the target window"):
+        SessionController.recover(db, sid)
+
+
 def test_cancel_keeps_partial_text(db):
     clock = FakeClock()
     c = SessionController(db, clock)

@@ -1,7 +1,8 @@
 # Testing report
 
+## Previous baseline (v0.3)
 Environment: Linux container, Python 3.13.17, PySide6-Essentials 6.12.0, pytest 9.2.0, ruff 0.17.3, Qt `offscreen` platform.
-**Nothing was run on Windows.** Date of the last full run: 2026-10-28.
+At that time, nothing had been run on Windows. Date of that full run: 2026-10-28.
 
 ## Executed and passing
 
@@ -46,3 +47,18 @@ Environment: Linux container, Python 3.13.17, PySide6-Essentials 6.12.0, pytest 
 
 ## v0.3 (writing rhythm) additions
 217 tests pass (66 in `test_rhythm.py`, 22 UI tests), ruff clean, `pip-audit` clean, frozen Linux build selftest passes (6 checks). Legacy planner output is pinned by golden hashes and unchanged. Not run: Windows build/installer (CI does this on tag push; see the release page), screen readers.
+
+## v0.4.0 Release Verification
+Environment: Windows 11, Python 3.13.5, PySide6-Essentials 6.12.0, Qt offscreen for tests, Inno Setup 6.7.3.
+
+| Check | Result |
+|---|---|
+| Automated tests (`.venv` Python) | **234 passed, 1 skipped** |
+| Ruff (`ruff check src tests`) | all checks passed |
+| Dependency audit (`pip-audit -r requirements.lock --require-hashes`) | no known vulnerabilities |
+| One-folder frozen app | built; all 6 self-test checks passed |
+| Portable one-file app | built; all 6 self-test checks passed |
+| Installer | compiled; silent install, installed-app self-test, and uninstall passed |
+| Release checksums | generated for installer and portable exe in `release/SHA256SUMS.txt` |
+
+The artifacts are unsigned. The focused-window backend was not manually exercised against a third-party editor during release validation; its event planning, focus guards, timing, cancellation, and recovery rules are covered by automated tests. Start Menu/desktop shortcuts, offline-machine behavior, data retention after uninstall, and the full manual checklist remain unverified.

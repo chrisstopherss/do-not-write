@@ -1,6 +1,6 @@
-; Inno Setup script. Build after PyInstaller one-folder:  iscc packaging\installer.iss /DAppVersion=0.3.0
+; Inno Setup script. Build after PyInstaller one-folder:  iscc packaging\installer.iss /DAppVersion=0.4.0
 #ifndef AppVersion
-  #define AppVersion "0.3.0"
+  #define AppVersion "0.4.0"
 #endif
 [Setup]
 AppId={{B6F1E3C2-5A39-4E0B-9C57-2D8F4A6E7A10}

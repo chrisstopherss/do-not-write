@@ -60,11 +60,16 @@ class SessionController:
         return self.session.state if self.session else IDLE
 
     def create(self, text: str, duration_ms: int, seed: int, sim: SimConfig, grace_ms: int = DEFAULT_GRACE_MS,
-               checkpoint_ms: int | None = None, label: str = "", rhythm: RhythmConfig | None = None) -> str:
+               checkpoint_ms: int | None = None, label: str = "", rhythm: RhythmConfig | None = None,
+               input_mode: str = "internal") -> str:
         events, self.deadline = build_plan(text, seed, sim, duration_ms, grace_ms, checkpoint_ms, rhythm)
         cfg: dict[str, Any] = {"sim": sim.to_dict(), "grace_ms": grace_ms, "checkpoint_ms": checkpoint_ms}
         if rhythm is not None:
             cfg["rhythm"] = rhythm.to_dict()
+        if input_mode not in ("internal", "focused_window"):
+            raise ValueError(f"unknown input mode {input_mode!r}")
+        if input_mode != "internal":
+            cfg["input_mode"] = input_mode
         self.sid = self.db.create_session(source_text=text, seed=seed, duration_ms=duration_ms, config=cfg, label=label,
                                           status="idle", origin="simulated")
         self.session = Session(events, duration_ms, self.clock)
@@ -134,6 +139,8 @@ class SessionController:
         if row is None:
             raise StorageError("no such session")
         cfg = json.loads(row["config_json"])
+        if cfg.get("input_mode") == "focused_window":
+            raise StorageError("Focused-window sessions cannot be resumed after restart. Start a new session and reselect the target window.")
         legacy_ok = row["engine_version"] in LEGACY_COMPATIBLE_ENGINES and "rhythm" not in cfg
         if row["engine_version"] != ENGINE_VERSION and not legacy_ok:
             raise StorageError(f"session was created with engine {row['engine_version']}; cannot replay deterministically with {ENGINE_VERSION}")

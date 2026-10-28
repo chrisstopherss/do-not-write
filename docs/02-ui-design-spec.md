@@ -37,3 +37,5 @@ Every control has a visible label or `aria-label`; groups use `radiogroup`/`role
 
 ## Provenance rule (UI-wide)
 Every datum is tagged as one of: **COUNTED** (mechanically measured from text), **SIMULATED** (produced by the engine), **HEURISTIC** (an observation with no claim of proof). A persistent "Synthetic output" badge is on every screen that shows output. Nothing in the UI claims to show authentic human behavior, authorship, or AI-detection results.
+
+Focused-window input is an explicit opt-in on the New session page. The selected window is confirmed before starting; the session pauses if this application receives focus and stops if another window takes focus. The active view retains the Synthetic output label.

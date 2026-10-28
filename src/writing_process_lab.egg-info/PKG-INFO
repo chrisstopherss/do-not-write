@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: writing-process-lab
-Version: 0.2.0
+Version: 0.4.0
 Summary: Offline writing-process simulator and research lab (all simulated output is labeled synthetic)
 Requires-Python: >=3.12
 Requires-Dist: PySide6-Essentials<7,>=6.7

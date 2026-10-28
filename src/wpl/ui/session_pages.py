@@ -54,6 +54,13 @@ from ..engine.simulate import ALL_CATEGORIES, CHAR_LEVEL, CategoryConfig, Mistak
 from ..engine.text import sentences, word_count
 from ..io import exporters as X
 from ..io.textfiles import WARN_CHARS, InputError, read_text_file, validate_source_text
+from ..live_input import (
+    MIN_LIVE_DURATION_MS,
+    FocusChangedError,
+    LiveInputError,
+    enumerate_windows,
+    validate_live_duration,
+)
 from ..service import SessionController
 from ..storage.db import Database, StorageError
 from . import theme
@@ -88,7 +95,7 @@ def diff_html(a: str, b: str) -> str:
 
 
 class NewSessionPage(QWidget):
-    start_requested = Signal(str, int, int, object, str, object)  # text, duration_ms, seed, SimConfig, label, RhythmConfig
+    start_requested = Signal(str, int, int, object, str, object, object)  # final object is an optional window target
 
     def __init__(self, db: Database) -> None:
         super().__init__()
@@ -165,6 +172,26 @@ class NewSessionPage(QWidget):
         self.minutes.valueChanged.connect(self._custom_changed)
         root.addLayout(dur)
 
+        live_box = QGroupBox("Live writing")
+        live_row = QHBoxLayout(live_box)
+        self.external_input = QCheckBox("Type into a focused window")
+        self.external_input.setAccessibleName("Enable focused-window input")
+        self.target_window = QComboBox()
+        self.target_window.setAccessibleName("Target window")
+        self.target_window.setMinimumWidth(280)
+        self.refresh_targets_btn = button("Refresh windows")
+        self.refresh_targets_btn.clicked.connect(self._refresh_targets)
+        self.external_input.toggled.connect(self._live_toggled)
+        live_row.addWidget(self.external_input)
+        live_row.addWidget(QLabel("Target"))
+        live_row.addWidget(self.target_window, 1)
+        live_row.addWidget(self.refresh_targets_btn)
+        root.addWidget(live_box)
+        self.live_note = label("Internal preview remains available. Focused-window input is opt-in and stops if focus changes.", "muted")
+        root.addWidget(self.live_note)
+        self._refresh_targets()
+        self._live_toggled(False)
+
         self.rhythm = RhythmPanel()
         self.rhythm.changed.connect(self._update_estimate)
         self.rhythm.preview_requested.connect(self._preview_schedule)
@@ -234,6 +261,32 @@ class NewSessionPage(QWidget):
         self.chips["Custom"].setChecked(True)
         self._update_estimate()
 
+    def _live_toggled(self, enabled: bool) -> None:
+        self.target_window.setEnabled(enabled)
+        self.refresh_targets_btn.setEnabled(enabled)
+        self.live_note.setText("Focused-window input requires 30 minutes to 24 hours. Focus moving here pauses; another window stops the session."
+                       if enabled else "Internal preview remains available. Focused-window input is opt-in and stops if focus changes.")
+        if hasattr(self, "start_btn"):
+            self._update_estimate()
+
+    def _refresh_targets(self) -> None:
+        selected = self.target_window.currentData()
+        selected_hwnd = getattr(selected, "hwnd", None)
+        self.target_window.clear()
+        try:
+            targets = enumerate_windows()
+        except (OSError, LiveInputError) as exc:
+            self._show_error(f"Could not list windows: {exc}")
+            targets = []
+        for target in targets:
+            self.target_window.addItem(f"{target.title}  (PID {target.process_id})", target)
+        for index in range(self.target_window.count()):
+            if getattr(self.target_window.itemData(index), "hwnd", None) == selected_hwnd:
+                self.target_window.setCurrentIndex(index)
+                break
+        if not targets:
+            self.target_window.addItem("No eligible windows found")
+
     def sim_config(self) -> SimConfig:
         m = MistakeConfig()
         for cat in ALL_CATEGORIES:
@@ -264,13 +317,15 @@ class NewSessionPage(QWidget):
         ms = self.duration_ms()
         if not text.strip():
             self.estimate.setText("Add text to see the schedule estimate.")
+        elif self.external_input.isChecked() and ms < MIN_LIVE_DURATION_MS:
+            self.estimate.setText("Focused-window sessions require at least 30 minutes (maximum 24 hours).")
         elif ms < 1000:
             self.estimate.setText("Choose a duration of at least 1 minute (maximum 24 hours).")
         else:
             per = ms / max(1, sents)
             self.estimate.setText(f"Schedule: about one sentence every {fmt_ms(per)}; planned to finish within {fmt_ms(ms)}. "
                                   f"If the deadline falls mid-sentence, up to {fmt_ms(DEFAULT_GRACE_MS)} extra is allowed to finish it.")
-        self.start_btn.setEnabled(bool(text.strip()))
+        self.start_btn.setEnabled(bool(text.strip()) and (not self.external_input.isChecked() or ms >= MIN_LIVE_DURATION_MS))
         if len(text) > WARN_CHARS:
             self._show_error(f"Large input ({len(text):,} characters); the interface may feel slower.")
         else:
@@ -296,8 +351,10 @@ class NewSessionPage(QWidget):
         try:
             text = validate_source_text(self.editor.toPlainText())
             ms = validate_duration(self.duration_ms())
+            if self.external_input.isChecked():
+                validate_live_duration(ms)
             return text, ms, self.sim_config()
-        except (InputError, ScheduleError, ValueError) as exc:
+        except (InputError, ScheduleError, LiveInputError, ValueError) as exc:
             self._show_error(str(exc))
             return None
 
@@ -404,7 +461,11 @@ class NewSessionPage(QWidget):
         except InfeasibleSchedule as exc:
             self._offer_alternative(exc)
             return
-        self.start_requested.emit(text, ms, self.seed.value(), cfg, "", rhythm)
+        target = self.target_window.currentData() if self.external_input.isChecked() else None
+        if self.external_input.isChecked() and target is None:
+            self._show_error("Select a target window and refresh the list if it is missing.")
+            return
+        self.start_requested.emit(text, ms, self.seed.value(), cfg, "", rhythm, target)
 
 
 class OutputView(QPlainTextEdit):
@@ -460,11 +521,13 @@ class ActiveSessionPage(QWidget):
         self.setObjectName("page")
         self.db = db
         self.ctl: SessionController | None = None
+        self.input_backend = None
         root = QVBoxLayout(self)
         root.setContentsMargins(28, 20, 28, 20)
         head = QHBoxLayout()
         head.addWidget(label("Active session", "h1"))
-        head.addWidget(label("Synthetic output", "badge", wrap=False))
+        self.mode_badge = label("Synthetic output", "badge", wrap=False)
+        head.addWidget(self.mode_badge)
         head.addStretch(1)
         self.state_lb = label("", "muted", wrap=False)
         head.addWidget(self.state_lb)
@@ -499,7 +562,7 @@ class ActiveSessionPage(QWidget):
         ctl = QHBoxLayout()
         self.pause_btn = button("Pause")
         self.resume_btn = button("Resume", "primary")
-        self.cancel_btn = button("Cancel session...", "danger")
+        self.cancel_btn = button("Stop session...", "danger")
         self.pause_btn.clicked.connect(self._pause)
         self.resume_btn.clicked.connect(self._resume)
         self.cancel_btn.clicked.connect(self._cancel)
@@ -510,11 +573,12 @@ class ActiveSessionPage(QWidget):
         self.info = label("", "muted", wrap=False)
         ctl.addWidget(self.info)
         root.addLayout(ctl)
-        root.addWidget(label("Recent simulated events (generated by the engine; not a record of human activity)", "h2"))
+        root.addWidget(label("Recent session events (last 500; generated by the engine, not a record of human activity)", "h2"))
         self.events = QPlainTextEdit()
         self.events.setReadOnly(True)
         self.events.setMaximumHeight(130)
-        self.events.setAccessibleName("Recent simulated events")
+        self.events.document().setMaximumBlockCount(500)
+        self.events.setAccessibleName("Recent session events (simulated)")
         root.addWidget(self.events)
         self._due = QTimer(self)
         self._due.setSingleShot(True)
@@ -524,8 +588,12 @@ class ActiveSessionPage(QWidget):
         self._tick.timeout.connect(self._refresh)
         self._sync()
 
-    def attach(self, ctl: SessionController, text: str = "") -> None:
+    def attach(self, ctl: SessionController, text: str = "", input_backend=None) -> None:
         self.ctl = ctl
+        self.input_backend = input_backend
+        if input_backend is not None:
+            ctl.session.max_batch = 1
+        self.mode_badge.setText("Synthetic output · focused window" if input_backend is not None else "Synthetic output")
         self.view.reset(ctl.text)
         self.events.clear()
         s = self.db.get_session(ctl.sid)
@@ -560,6 +628,12 @@ class ActiveSessionPage(QWidget):
         if not self.ctl or not self.ctl.session:
             return
         s = self.ctl.session
+        if s.state == RUNNING and self.input_backend is not None and not self.input_backend.has_target_focus():
+            if self.input_backend.is_own_process_foreground():
+                self._pause_for_focus()
+            else:
+                self._stop_for_focus_change()
+            return
         phase, detail = s.phase_detail()
         self.state_lb.setText(phase if not detail else f"{phase} ({detail})")
         self.split_lb.setText(f"Active writing {fmt_ms(s.writing_ms())}   |   Idle (simulated pauses and breaks) {fmt_ms(s.idle_ms())}")
@@ -575,6 +649,25 @@ class ActiveSessionPage(QWidget):
     def _on_due(self) -> None:
         if not self.ctl or not self.ctl.session or self.ctl.state != RUNNING:
             return
+        if self.input_backend is not None and not self.input_backend.has_target_focus():
+            if self.input_backend.is_own_process_foreground():
+                self._pause_for_focus()
+            else:
+                self._stop_for_focus_change()
+            return
+        if self.input_backend is not None:
+            session = self.ctl.session
+            if session.cursor < len(session.events) and session.next_due_in_ms() == 0:
+                event = session.events[session.cursor]
+                if event.is_text_op:
+                    try:
+                        self.input_backend.apply_event(event)
+                    except FocusChangedError:
+                        self._stop_for_focus_change()
+                        return
+                    except LiveInputError as exc:
+                        self._fail(f"Focused-window input stopped: {exc}")
+                        return
         try:
             due = self.ctl.poll()
         except StorageError as exc:
@@ -582,8 +675,7 @@ class ActiveSessionPage(QWidget):
             return
         for e in due:
             self.view.apply(e)
-            if e.kind != "insert" or e.meta.get("category"):
-                self._log(e)
+            self._log(e)
         if self.ctl.state == COMPLETED:
             self._tick.stop()
             self._sync()
@@ -621,6 +713,27 @@ class ActiveSessionPage(QWidget):
         self.banner.show()
         self._sync()
 
+    def _pause_for_focus(self) -> None:
+        if self.ctl and self.ctl.state == RUNNING:
+            self._due.stop()
+            self.ctl.pause()
+            self.banner.setText("Paused because focus moved to Writing Process Lab. Resume to return to the selected target.")
+            self.banner.show()
+            self._sync()
+
+    def _stop_for_focus_change(self) -> None:
+        if not self.ctl or self.ctl.state not in (RUNNING, PAUSED):
+            return
+        self._due.stop()
+        self._tick.stop()
+        self.ctl.cancel()
+        self.banner.setObjectName("banner_err")
+        self.banner.setStyleSheet(self.banner.styleSheet())
+        self.banner.setText("Session stopped because the selected target lost focus. No further input was sent; partial output was saved to History.")
+        self.banner.show()
+        self._sync()
+        self.finished.emit(self.ctl.sid)
+
     def _pause(self) -> None:
         if self.ctl:
             self._due.stop()
@@ -630,6 +743,13 @@ class ActiveSessionPage(QWidget):
 
     def _resume(self) -> None:
         if self.ctl:
+            if self.input_backend is not None:
+                try:
+                    self.input_backend.activate_target()
+                except LiveInputError as exc:
+                    self.banner.setText(f"Cannot resume focused-window input: {exc}")
+                    self.banner.show()
+                    return
             self.ctl.resume()
             self.timeline.markers = self._markers()
             self._tick.start()
@@ -644,14 +764,14 @@ class ActiveSessionPage(QWidget):
             self._due.stop()
             self.ctl.pause(record=False)
             self._sync()
-        r = QMessageBox.question(self, "Cancel session", "Cancel this session? The text produced so far is kept in History, "
-                                 "but the session cannot be resumed.")
+        r = QMessageBox.question(self, "Stop session", "Stop this session? The text produced so far is kept in History, "
+                     "but the session cannot be resumed.")
         if r == QMessageBox.StandardButton.Yes:
             self._due.stop()
             self._tick.stop()
             self.ctl.cancel()
             self.timeline.markers = self._markers()
-            self.banner.setText("Session cancelled. Partial output was saved to History.")
+            self.banner.setText("Session stopped. Partial output was saved to History.")
             self.banner.show()
             self._sync()
             self.finished.emit(self.ctl.sid)
@@ -735,7 +855,9 @@ class HistoryPage(QWidget):
         for k in ("txt", "md", "json", "csv", "delete"):
             self.btns[k].setEnabled(bool(sids) if k == "delete" else one)
         self.btns["rerun"].setEnabled(bool(row and row["seed"] is not None and "sim" in json.loads(row["config_json"])))
-        self.btns["resume"].setEnabled(bool(row and row["status"] == "interrupted"))
+        can_resume = bool(row and row["status"] == "interrupted" and
+                  json.loads(row["config_json"]).get("input_mode") != "focused_window")
+        self.btns["resume"].setEnabled(can_resume)
         self.btns["compare"].setEnabled(len(sids) == 2)
         if row:
             c = theme.colors()

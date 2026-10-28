@@ -5,8 +5,9 @@ text reproduced progressively over a chosen duration with seeded, reproducible m
 analytics, a research lab for comparing workflows, and exports. Everything stays on your machine.
 
 > It is a research tool. All generated output and events are labeled SIMULATED or SYNTHETIC. No metric here establishes
-> authorship or how a document was created, and there is no AI/human score. It does **not** type into other applications,
-> connect to Google accounts, or try to defeat detectors or forge revision histories (see `docs/03-scope-decisions.md`).
+> authorship or how a document was created, and there is no AI/human score. Focused-window typing is optional, visibly labeled
+> synthetic, and requires explicit target confirmation. It does not connect to Google accounts or try to defeat detectors
+> or forge revision histories (see `docs/03-scope-decisions.md`).
 
 ## Status (honest)
 
@@ -17,14 +18,15 @@ analytics, a research lab for comparing workflows, and exports. Everything stays
 | UI: New session, Active session, History/results, Settings | Implemented (screenshot-checked offscreen, 11 UI tests) |
 | Writing Process Lab: overview, timeline, revisions, charts, experiments A-E, evaluation, final-text research, import, guide, data & privacy | Implemented, tested |
 | Writing rhythm modes (Regular / Reflective / Extended Breaks / Custom), break scheduler, rhythm analytics and Rhythm tab | Implemented, tested (see below) |
+| Live Writing Studio: preview, elapsed/remaining time, timeline, Start/Pause/Resume/Stop, opt-in focused-window Unicode input, and JSON/CSV export | Implemented; 30-minute to 24-hour duration; target focus is validated during playback |
 | SQLite storage with migrations, local deletion controls | Implemented, tested |
 | Exports: TXT, Markdown, HTML, JSON, CSV (formula-injection safe) | Implemented, tested. **DOCX not implemented** |
 | Dictionary spelling / grammar-pattern analysis modules | **Not implemented** |
-| External typing, Google Docs integration | **Not built, by decision** |
-| Windows exe, installer | Build files written (`packaging/`, CI workflow). **Never built or run on Windows.** Linux build of the same spec was made and self-tested |
+| Google Docs integration | **Not built** |
+| Windows exe, installer | Built and smoke-tested on Windows 11 for 0.4.0; unsigned. See `docs/windows-build.md` and `docs/testing-report.md` |
 | Code signing, app icon, license file | Not done |
 
-217 automated tests pass on Linux (see `docs/testing-report.md`, including what was not run).
+Automated test and release results are recorded in `docs/testing-report.md`.
 
 ## Run from source
 ```bash
@@ -35,6 +37,9 @@ python -m wpl --selftest      # non-interactive release check (add --selftest-ou
 pip install pytest ruff && pytest -q && ruff check src tests
 ```
 Data: `%LOCALAPPDATA%\WritingProcessLab` (Windows) or `~/.local/share/WritingProcessLab`; override with `WPL_DATA_DIR`.
+
+## Live Writing (v0.4)
+The New session page includes an opt-in focused-window mode. Select and confirm an editable target window, place its caret, and start; the session uses the normal duration, mistake, and rhythm controls while previewing every event internally. Focus returning to this app pauses the clock; switching elsewhere stops the session. Focused-window sessions must be reselected after restart. Output remains synthetic and is available through the existing History JSON/CSV exports.
 
 ## Writing rhythm and breaks (v0.3)
 Session configuration has a **Writing rhythm** section: four modes, editable custom parameters with validation limits

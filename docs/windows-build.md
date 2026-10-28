@@ -1,7 +1,6 @@
 # Building and releasing on Windows
 
-**Status: nothing in this file has been executed on Windows.** The Linux build of the same PyInstaller spec was built and
-its `--selftest` passed (see testing report), which validates data-file bundling and imports, not Windows behavior.
+**Release target: 0.4.0.** Windows build and installer checks are recorded in `docs/testing-report.md`; signing remains unavailable.
 
 ## Prerequisites
 Windows 10/11 x64, Python 3.12, Git, [Inno Setup 6](https://jrsoftware.org/isinfo.php).
@@ -19,9 +18,9 @@ dist\WritingProcessLab\WritingProcessLab.exe --selftest --selftest-out selftest.
 type selftest.txt
 ```
 Portable single file: set `WPL_ONEFILE=1` and run PyInstaller again (output `dist\WritingProcessLab-portable.exe`).
-Installer: `iscc packaging\installer.iss /DAppVersion=0.3.0` (output in `release\`).
+Installer: `iscc packaging\installer.iss /DAppVersion=0.4.0` (output in `release\`).
 
-CI equivalent: `.github/workflows/windows-release.yml` (manual or on `v*` tags). It has never been run.
+CI equivalent: `.github/workflows/windows-release.yml` (manual or on `v*` tags).
 
 The executable is a windowed app with no console, so `--selftest` prints nothing by itself: always pass `--selftest-out <file>` and read the file
 (it must end with `all checks passed`). The bundle excludes Qt's network modules and the stdlib `http`, `xmlrpc`, `ftplib`, `smtplib`;
@@ -33,12 +32,14 @@ everything next to a portable exe). No administrator rights are needed; the inst
 The uninstaller does not delete user data.
 
 ## Release checklist (to do on a clean Windows machine/VM)
-- [ ] Installer runs, Start Menu shortcut works, optional desktop shortcut works
-- [ ] App starts offline; database created; `--selftest` passes
+- [x] Installer installs and uninstalls silently; installed app `--selftest` passes
+- [x] Frozen one-folder and portable apps pass `--selftest`
+- [ ] Start Menu shortcut works, optional desktop shortcut works
+- [ ] App starts with networking unavailable; database created
 - [ ] Create a session, export TXT/CSV/JSON, restart, history is still there
 - [ ] Kill the process during a session, restart, resume from History
 - [ ] Uninstall leaves user data; deleting the data folder resets the app
-- [ ] Record SHA-256 of each artifact (CI step does this)
+- [x] Record SHA-256 of each release executable (`release/SHA256SUMS.txt`)
 - [ ] Signing: not done. Without an Authenticode certificate SmartScreen shows "unknown publisher".
       Do not describe artifacts as signed until `Get-AuthenticodeSignature` reports `Valid`.
 

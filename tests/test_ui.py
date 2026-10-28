@@ -87,6 +87,41 @@ def test_start_flow_from_new_session_page(win):
     win.active._due.stop()
 
 
+def test_focused_window_pause_and_stop_on_focus_change(win):
+    class FakeInput:
+        focused = True
+        own_foreground = False
+
+        def has_target_focus(self):
+            return self.focused
+
+        def is_own_process_foreground(self):
+            return self.own_foreground
+
+        def activate_target(self):
+            self.focused = True
+
+        def apply_event(self, event):
+            return None
+
+    backend = FakeInput()
+    ctl = SessionController(win.db, FakeClock())
+    ctl.create("A focused-window test sentence.", 30 * 60_000, 1, SimConfig())
+    win.active.attach(ctl, input_backend=backend)
+    ctl.start()
+    backend.focused = False
+    backend.own_foreground = True
+    win.active._on_due()
+    assert ctl.state == "paused"
+
+    backend.own_foreground = False
+    win.active._stop_for_focus_change()
+    assert ctl.state == "cancelled" and "lost focus" in win.active.banner.text()
+    assert win.db.get_session(ctl.sid)["final_text"] == ctl.text
+    win.active._tick.stop()
+    win.active._due.stop()
+
+
 def test_custom_duration_validation_message(win):
     win.new_page.set_text("Some text.")
     win.new_page.chips["Custom"].setChecked(True)
@@ -283,7 +318,7 @@ def test_active_page_shows_phase_idle_split_and_cancel_in_break(win, monkeypatch
     win.active._resume()
     win.active._due.stop()
     win.active._cancel()                                              # cancel while the break is running
-    assert ctl.state == "cancelled" and win.active.banner.text().startswith("Session cancelled")
+    assert ctl.state == "cancelled" and win.active.banner.text().startswith("Session stopped")
     acts = win.db.get_user_actions(sid)
     assert [a["action"] for a in acts] == ["pause", "resume", "cancel"] and acts[-1]["phase"] == "Break"
     assert len(win.active.timeline.markers) == 3

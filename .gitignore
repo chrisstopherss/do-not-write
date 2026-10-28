@@ -6,4 +6,6 @@ __pycache__/
 *.db
 build/
 dist/
+dist-portable/
+release/
 *.egg-info/
