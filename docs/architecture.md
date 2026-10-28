@@ -24,7 +24,7 @@ src/wpl/
                importer.py (wpl.revision_history/1), textfiles.py (validated input files)
   service.py   SessionController (engine <-> database), plan rebuild for crash recovery, analyze_session
   ui/          main_window, session_pages, lab_pages, charts (QPainter), theme, widgets
-  app.py       entry point, logging, --selftest
+  app.py       entry point, logging, --selftest [--selftest-out FILE]
 ```
 
 ## Key design decisions

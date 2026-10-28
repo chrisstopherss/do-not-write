@@ -22,20 +22,34 @@ def setup_logging(data_dir: Path) -> Path:
     return path
 
 
-def selftest(out_path: str | None = None) -> int:
-    """Release check: runs without user interaction against a throwaway data folder. Prints one line per check.
-    Windowed executables have no console, so results are also written to ``out_path`` when given."""
-    import tempfile
+class _Report:
+    """Collects selftest lines; also appends them to a result file (best effort) because windowed exes have no console."""
 
-    lines: list[str] = []
+    def __init__(self, path: str | None) -> None:
+        self.path = path
+        self.lines: list[str] = []
+        self.file_error: str | None = None
 
-    def emit(line: str) -> None:
-        lines.append(line)
+    def emit(self, line: str) -> None:
+        self.lines.append(line)
         if sys.stdout is not None:
             print(line)
-        if out_path:
-            Path(out_path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+        if self.path and self.file_error is None:
+            try:
+                with open(self.path, "a", encoding="utf-8") as fh:
+                    fh.write(line + "\n")
+            except OSError as exc:  # result-file I/O must never change the verdict
+                self.file_error = str(exc)
+                if sys.stdout is not None:
+                    print(f"WARN cannot write result file: {exc}")
 
+
+def selftest(report: _Report | None = None) -> int:
+    """Release check: runs without user interaction against a throwaway data folder. Prints one line per check."""
+    import tempfile
+
+    rep = report or _Report(None)
+    emit = rep.emit
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
 
@@ -81,21 +95,33 @@ def selftest(out_path: str | None = None) -> int:
     return 1 if failures else 0
 
 
+def _selftest_args(args: list[str]) -> tuple[bool, str | None]:
+    """(run selftest?, result file). ``--selftest-out`` requires a path; a missing path is an error, not a silent no-op."""
+    if "--selftest" not in args:
+        return False, None
+    if "--selftest-out" not in args:
+        return True, None
+    i = args.index("--selftest-out")
+    if i + 1 >= len(args) or args[i + 1].startswith("--"):
+        raise SystemExit("--selftest-out needs a file path")
+    return True, args[i + 1]
+
+
 def main(argv: list[str] | None = None) -> int:
-    args = argv or sys.argv
-    if "--selftest" in args:
-        out = args[args.index("--selftest-out") + 1] if "--selftest-out" in args and args.index("--selftest-out") + 1 < len(args) else None
+    args = sys.argv if argv is None else argv
+    run_selftest, out = _selftest_args(args)
+    if run_selftest:
+        rep = _Report(out)
         try:
-            return selftest(out)
-        except Exception as exc:  # noqa: BLE001 - a crash must still produce a failing result file
-            if out:
-                Path(out).write_text(f"FAIL selftest crashed: {type(exc).__name__}: {exc}\n", encoding="utf-8")
-            raise
+            return selftest(rep)
+        except Exception as exc:  # noqa: BLE001 - a crash must still leave a failing result, keeping the lines already written
+            rep.emit(f"FAIL selftest crashed: {type(exc).__name__}: {exc}")
+            return 1
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     from .ui.main_window import MainWindow
 
-    app = QApplication(argv or sys.argv)
+    app = QApplication(args)
     app.setStyle("Fusion")
     app.setApplicationName("Writing Process Lab")
     data_dir = Path(os.environ.get("WPL_DATA_DIR") or default_data_dir())

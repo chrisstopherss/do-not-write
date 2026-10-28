@@ -196,3 +196,38 @@ def test_document_text_never_written_to_log(tmp_path, db):
     content = log_path.read_text(encoding="utf-8")
     assert "session created" in content and "completed" in content
     assert "Zanzibar" not in content and "unlikely" not in content
+
+
+def test_selftest_result_file_and_flag_parsing(tmp_path):
+    import pytest
+
+    from wpl.app import _selftest_args, main
+    assert _selftest_args(["x"]) == (False, None) and _selftest_args(["x", "--selftest"]) == (True, None)
+    assert _selftest_args(["--selftest", "--selftest-out", "r.txt"]) == (True, "r.txt")
+    for bad in (["--selftest", "--selftest-out"], ["--selftest", "--selftest-out", "--other"]):
+        with pytest.raises(SystemExit):
+            _selftest_args(bad)
+    out = tmp_path / "r.txt"
+    assert main(["--selftest", "--selftest-out", str(out)]) == 0
+    text = out.read_text(encoding="utf-8")
+    assert text.count("PASS ") >= 6 and text.strip().endswith("all checks passed") and "FAIL" not in text
+    # an unwritable result path must not change the verdict
+    assert main(["--selftest", "--selftest-out", str(tmp_path / "no" / "dir" / "r.txt")]) == 0
+
+
+def test_selftest_crash_keeps_earlier_lines(tmp_path, monkeypatch):
+    import wpl.io.exporters as X
+    from wpl.app import main
+    monkeypatch.setattr(X, "events_csv", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    out = tmp_path / "r.txt"
+    assert main(["--selftest", "--selftest-out", str(out)]) == 1
+    text = out.read_text(encoding="utf-8")
+    assert "PASS database created" in text and "FAIL selftest crashed: RuntimeError: boom" in text
+
+
+def test_main_with_empty_argv_does_not_fall_back_to_sys_argv(monkeypatch):
+    import sys
+
+    from wpl.app import _selftest_args
+    monkeypatch.setattr(sys, "argv", ["prog", "--selftest"])
+    assert _selftest_args([]) == (False, None)

@@ -33,14 +33,18 @@ jobs:
         env: { WPL_ONEFILE: "1" }
       - name: Self-test the built executables
         shell: pwsh
+        timeout-minutes: 10
         run: |
-          # Windowed exes do not block PowerShell or expose a console, so run them with -Wait and read their result file.
+          # Windowed exes do not block PowerShell or expose a console: start them, wait with a timeout, read their result file.
           foreach ($exe in @(".\dist\WritingProcessLab\WritingProcessLab.exe", ".\dist-portable\WritingProcessLab-portable.exe")) {
             $out = Join-Path $env:RUNNER_TEMP ("selftest-" + [IO.Path]::GetFileNameWithoutExtension($exe) + ".txt")
             if (Test-Path $out) { Remove-Item $out }
-            $p = Start-Process -FilePath $exe -ArgumentList "--selftest", "--selftest-out", $out -Wait -PassThru
-            if (Test-Path $out) { Get-Content $out } else { Write-Host "no result file written by $exe" }
+            $p = Start-Process -FilePath $exe -ArgumentList "--selftest", "--selftest-out", $out -PassThru
+            if (-not $p.WaitForExit(240000)) { Stop-Process -Id $p.Id -Force; throw "selftest timed out for $exe (it may be showing an error dialog)" }
+            $text = if (Test-Path $out) { Get-Content $out -Raw } else { "" }
+            Write-Host $text
             if ($p.ExitCode -ne 0) { throw "selftest failed for $exe (exit code $($p.ExitCode))" }
+            if ($text -notmatch "all checks passed") { throw "selftest for $exe did not report 'all checks passed'" }
           }
       - name: Build installer
         shell: pwsh

@@ -31,7 +31,7 @@ analytics, a research lab for comparing workflows, and exports. Everything stays
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.lock && pip install -e . --no-deps
 python -m wpl                 # launch
-python -m wpl --selftest      # non-interactive release check
+python -m wpl --selftest      # non-interactive release check (add --selftest-out FILE for windowed builds)
 pip install pytest ruff && pytest -q && ruff check src tests
 ```
 Data: `%LOCALAPPDATA%\WritingProcessLab` (Windows) or `~/.local/share/WritingProcessLab`; override with `WPL_DATA_DIR`.

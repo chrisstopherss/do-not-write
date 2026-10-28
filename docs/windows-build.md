@@ -15,12 +15,17 @@ pip install pytest ruff pip-audit pyinstaller
 ruff check src tests
 pytest -q
 pyinstaller packaging/wpl.spec --noconfirm
-dist\WritingProcessLab\WritingProcessLab.exe --selftest
+dist\WritingProcessLab\WritingProcessLab.exe --selftest --selftest-out selftest.txt
+type selftest.txt
 ```
 Portable single file: set `WPL_ONEFILE=1` and run PyInstaller again (output `dist\WritingProcessLab-portable.exe`).
 Installer: `iscc packaging\installer.iss /DAppVersion=0.3.0` (output in `release\`).
 
 CI equivalent: `.github/workflows/windows-release.yml` (manual or on `v*` tags). It has never been run.
+
+The executable is a windowed app with no console, so `--selftest` prints nothing by itself: always pass `--selftest-out <file>` and read the file
+(it must end with `all checks passed`). The bundle excludes Qt's network modules and the stdlib `http`, `xmlrpc`, `ftplib`, `smtplib`;
+`urllib` ships (Python's own `pathlib` needs it on Windows) but no application code uses it.
 
 ## Data location and portability
 Data and logs live in `%LOCALAPPDATA%\WritingProcessLab` (override with the `WPL_DATA_DIR` environment variable, e.g. to keep
