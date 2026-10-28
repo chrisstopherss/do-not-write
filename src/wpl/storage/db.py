@@ -58,10 +58,25 @@ class Database:
             if ok != "ok":
                 raise DatabaseCorrupt(f"integrity check failed: {ok}")
         except sqlite3.OperationalError as exc:  # cannot open, read-only location, disk full, locked
+            self._close_quietly()
             raise StorageError(f"cannot open database: {exc}") from exc
         except sqlite3.DatabaseError as exc:  # not a database / malformed
+            self._close_quietly()  # on Windows an open handle would block moving the corrupt file aside
             raise DatabaseCorrupt(str(exc)) from exc
-        self.migrate()
+        except DatabaseCorrupt:
+            self._close_quietly()
+            raise
+        try:
+            self.migrate()
+        except Exception:
+            self._close_quietly()
+            raise
+
+    def _close_quietly(self) -> None:
+        try:
+            self.conn.close()
+        except Exception:  # noqa: BLE001 - nothing useful to do if close itself fails
+            pass
 
     # -- migrations
     def version(self) -> int:
