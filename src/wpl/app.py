@@ -66,31 +66,36 @@ def selftest(report: _Report | None = None) -> int:
         if not ok:
             failures.append(name)
 
-    with tempfile.TemporaryDirectory() as td:
+    # ignore_cleanup_errors: on Windows a still-open file must not turn a real failure into a PermissionError during cleanup
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
         d = Path(td)
         db = Database(d / "wpl.db")
-        check("database created and migrated (incl. user_actions)", db.version() >= 3)
-        from .engine.breaks import plan_rhythm
-        from .engine.rhythm import preset
-        from .engine.simulate import MistakeConfig, SimConfig
-        from .lab.conditions import sample_text
-        plan = plan_rhythm(sample_text(), 7, SimConfig(MistakeConfig.default()), preset("reflective"), 3_600_000)
-        check("break scheduler plans a session inside its time budget", plan.summary.total_ms <= 3_600_000 and plan.summary.idle_ms > 0)
-        eid = create_example_experiment(db)
-        rows = experiment_rows(db, eid)
-        check("example experiment (25 runs) from stored data", len(rows) == 25)
-        sid = rows[0]["session_id"]
-        csv = X.events_csv(sid, "simulated", db.get_events(sid))
-        check("events CSV export", csv.startswith("session_id,data_origin") and len(csv.splitlines()) > 2)
-        path = X.write_new(d / "x.json", X.dataset_json("selftest", [X.session_dict(db.get_session(sid), db.get_events(sid))]))
-        check("JSON export written", path.exists() and path.stat().st_size > 100)
-        app = QApplication.instance() or QApplication([])
-        win = MainWindow(db, d, d / "wpl.log")
-        win.show()
-        app.processEvents()
-        check("main window builds", win.nav.count() == 5)
-        win.close()
-        db.close()
+        win = None
+        try:
+            check("database created and migrated (incl. user_actions)", db.version() >= 3)
+            from .engine.breaks import plan_rhythm
+            from .engine.rhythm import preset
+            from .engine.simulate import MistakeConfig, SimConfig
+            from .lab.conditions import sample_text
+            plan = plan_rhythm(sample_text(), 7, SimConfig(MistakeConfig.default()), preset("reflective"), 3_600_000)
+            check("break scheduler plans a session inside its time budget", plan.summary.total_ms <= 3_600_000 and plan.summary.idle_ms > 0)
+            eid = create_example_experiment(db)
+            rows = experiment_rows(db, eid)
+            check("example experiment (25 runs) from stored data", len(rows) == 25)
+            sid = rows[0]["session_id"]
+            csv = X.events_csv(sid, "simulated", db.get_events(sid))
+            check("events CSV export", csv.startswith("session_id,data_origin") and len(csv.splitlines()) > 2)
+            path = X.write_new(d / "x.json", X.dataset_json("selftest", [X.session_dict(db.get_session(sid), db.get_events(sid))]))
+            check("JSON export written", path.exists() and path.stat().st_size > 100)
+            app = QApplication.instance() or QApplication([])
+            win = MainWindow(db, d, d / "wpl.log")
+            win.show()
+            app.processEvents()
+            check("main window builds", win.nav.count() == 5)
+        finally:
+            if win is not None:
+                win.close()
+            db.close()
     emit(f"Writing Process Lab {APP_VERSION} (engine {ENGINE_VERSION}): {'FAILED' if failures else 'all checks passed'}")
     return 1 if failures else 0
 
