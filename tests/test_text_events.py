@@ -23,7 +23,7 @@ def test_empty_and_single_char():
     assert sentences("x") == ["x"]
 
 
-E = lambda seq, kind, pos=None, rem="", ins="", t=None: Event(seq, kind, "simulated", t, pos, rem, ins)  # noqa: E731
+E = lambda seq, kind, pos=None, rem="", ins="", t=None: Event(seq, kind, "simulated", t, pos, rem, ins)
 
 
 def test_replay_insert_delete_replace_and_origin():

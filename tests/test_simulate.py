@@ -4,7 +4,14 @@ import pytest
 
 from conftest import SAMPLE
 from wpl.engine.events import replay
-from wpl.engine.simulate import (ALL_CATEGORIES, CategoryConfig, ConfigError, MistakeConfig, SimConfig, simulate)
+from wpl.engine.simulate import (
+    ALL_CATEGORIES,
+    CategoryConfig,
+    ConfigError,
+    MistakeConfig,
+    SimConfig,
+    simulate,
+)
 
 
 def cfg(**rates):

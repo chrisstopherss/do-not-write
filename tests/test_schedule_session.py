@@ -1,8 +1,14 @@
 import pytest
 
 from wpl.engine.events import Event
-from wpl.engine.schedule import (MAX_GRACE_MS, ScheduleError, add_checkpoints, apply_deadline, fit_to_duration,
-                                 validate_duration)
+from wpl.engine.schedule import (
+    MAX_GRACE_MS,
+    ScheduleError,
+    add_checkpoints,
+    apply_deadline,
+    fit_to_duration,
+    validate_duration,
+)
 from wpl.engine.session import CANCELLED, COMPLETED, PAUSED, RUNNING, FakeClock, Session, SessionStateError
 
 

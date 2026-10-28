@@ -104,7 +104,7 @@ class Database:
         if not fields:
             return
         cols = ", ".join(f"{k}=?" for k in fields)
-        self.conn.execute(f"UPDATE sessions SET {cols} WHERE id=?", (*fields.values(), sid))  # noqa: S608 - keys whitelisted
+        self.conn.execute(f"UPDATE sessions SET {cols} WHERE id=?", (*fields.values(), sid))
         self.conn.commit()
 
     def get_session(self, sid: str) -> sqlite3.Row | None:
@@ -230,12 +230,26 @@ class Database:
         self.conn.commit()
         return did
 
+    def delete_dataset(self, did: str) -> None:
+        self.conn.execute("DELETE FROM sessions WHERE dataset_id=?", (did,))
+        self.conn.execute("DELETE FROM datasets WHERE id=?", (did,))
+        self.conn.commit()
+
     def list_datasets(self) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM datasets ORDER BY created_at DESC, rowid DESC").fetchall()
 
+    # -- settings
+    def get_setting(self, key: str, default: str = "") -> str:
+        r = self.conn.execute("SELECT value FROM app_settings WHERE key=?", (key,)).fetchone()
+        return r["value"] if r else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        self.conn.execute("INSERT OR REPLACE INTO app_settings(key,value) VALUES(?,?)", (key, value))
+        self.conn.commit()
+
     # -- retention / deletion
     def counts(self) -> dict[str, int]:
-        return {t: self.conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]  # noqa: S608 - fixed table names
+        return {t: self.conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
                 for t in ("sessions", "events", "experiments", "runs", "datasets", "features", "evaluation_results")}
 
     def delete_all_research_data(self) -> None:
@@ -244,7 +258,7 @@ class Database:
         self.conn.execute("DELETE FROM sessions WHERE id IN (SELECT session_id FROM runs WHERE session_id IS NOT NULL) "
                           "OR data_origin='imported'")
         for t in ("evaluation_results", "features", "analysis_runs", "runs", "conditions", "experiments", "datasets"):
-            self.conn.execute(f"DELETE FROM {t}")  # noqa: S608 - fixed table names
+            self.conn.execute(f"DELETE FROM {t}")
         self.conn.commit()
 
     def delete_everything(self) -> None:

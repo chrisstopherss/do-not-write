@@ -1,5 +1,8 @@
 # Scope decisions
 
+**Update (feature expansion):** the follow-up brief agrees with this scope: no external typing integration, no Google account
+integration, no trace optimization against detectors, no forged histories. The Writing Process Lab was built within those limits.
+
 ## External typing into other applications: NOT being built
 
 The brief asks for an optional feature that types the simulated output (with timing spread over hours, typos, and corrections) into other apps such as a word processor. I'm not building that part. Reasoning:

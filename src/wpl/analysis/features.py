@@ -51,6 +51,7 @@ class AnalysisInput:
     events: list[Event] = field(default_factory=list)
     duration_ms: int | None = None
     origin: str = "simulated"  # synthetic | simulated | imported | captured (data origin of the session)
+    source_text: str = ""      # the original input that was reproduced, if any (reference for text_diff)
 
 
 def summarize(vals: list[float]) -> dict[str, Any]:
@@ -62,7 +63,7 @@ def summarize(vals: list[float]) -> dict[str, Any]:
 def _hist(vals: list[int], edges: list[int]) -> dict[str, int]:
     out: dict[str, int] = {}
     for lo, hi in zip(edges, edges[1:] + [None], strict=True):
-        label = f"{lo}-{hi - 1}" if hi is not None else f"{lo}+"
+        label = f"{lo}+" if hi is None else str(lo) if hi - 1 == lo else f"{lo}-{hi - 1}"
         out[label] = sum(1 for v in vals if v >= lo and (hi is None or v < hi))
     return out
 
@@ -102,12 +103,15 @@ def repeated_phrases(a: AnalysisInput) -> list[FeatureValue]:
 def text_diff_features(a: AnalysisInput) -> list[FeatureValue]:
     from .diff import word_diff
 
-    ops = word_diff(a.initial_text, a.final_text)
+    ref = a.source_text or a.initial_text
+    if not ref:
+        return [missing("text_diff", "no source or initial text to compare against")]
+    ops = word_diff(ref, a.final_text)
     c = Counter(o.tag for o in ops if o.tag != "equal")
-    ratio = SequenceMatcher(None, a.initial_text, a.final_text, autojunk=False).ratio() if (a.initial_text or a.final_text) else 1.0
+    ratio = SequenceMatcher(None, ref, a.final_text, autojunk=False).ratio()
     return [ok("diff_word_inserts", c.get("insert", 0)), ok("diff_word_deletes", c.get("delete", 0)),
             ok("diff_word_replaces", c.get("replace", 0)), ok("char_similarity_ratio", round(ratio, 6),
-            "difflib SequenceMatcher ratio between initial/source text and final text; 1.0 = identical")]
+            "difflib SequenceMatcher ratio between source (or initial) text and final text; 1.0 = identical")]
 
 
 # ---------------------------------------------------------------- process extractors

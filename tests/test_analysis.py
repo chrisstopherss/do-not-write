@@ -5,7 +5,7 @@ import pytest
 from wpl.analysis.diff import summarize_ops, unified, word_diff
 from wpl.analysis.evaluation import Confusion, confusion, metrics, train_test_split, wilson
 from wpl.analysis.features import AnalysisInput, run_extractors
-from wpl.analysis.finaltext import (lexical_diversity, readability, sentence_length_variation, similarity)
+from wpl.analysis.finaltext import lexical_diversity, readability, sentence_length_variation, similarity
 from wpl.analysis.revisions import build_versions
 from wpl.engine.events import Event
 
@@ -24,7 +24,7 @@ def feats(res, ex, name):
 
 def test_process_metrics_hand_verified():
     res = run_extractors(AnalysisInput("", "Howdy", HAND))
-    g = lambda n: feats(res, "process_events", n)  # noqa: E731
+    g = lambda n: feats(res, "process_events", n)
     assert g("total_events")["value"] == 4
     assert (g("insertions")["value"], g("deletions")["value"], g("replacements")["value"]) == (2, 1, 1)
     assert g("inserted_chars")["value"] == 16 and g("removed_chars")["value"] == 11
@@ -176,3 +176,11 @@ def test_final_text_stats_known_values():
     big = " ".join(f"w{i % 60}" for i in range(120))
     assert lexical_diversity(big)["mattr50"] == 1.0  # every 50-token window holds 50 distinct words
     assert lexical_diversity(" ".join(["a"] * 60))["mattr50"] == pytest.approx(1 / 50)
+
+
+def test_text_diff_uses_source_text_and_reports_missing_without_one():
+    res = run_extractors(AnalysisInput("", "the slow fox", [], None, "simulated", "the quick fox"))
+    assert feats(res, "text_diff", "diff_word_replaces")["value"] == 1
+    assert feats(res, "text_diff", "char_similarity_ratio")["value"] < 1.0
+    res = run_extractors(AnalysisInput("", "anything"))
+    assert res["text_diff"]["features"][0]["status"] == "missing"

@@ -1,0 +1,149 @@
+{
+  "schema": "wpl.experiment_config/1",
+  "title": "Checkpoint frequency sweep (A)",
+  "description": "Condition A at three checkpoint intervals.",
+  "expected": "Checkpoint count falls as the interval grows; text events are unchanged.",
+  "repetitions": 5,
+  "base_seed": 2024,
+  "note": "Text is the bundled synthetic sample. Replace only with synthetic or explicitly authorized text.",
+  "conditions": [
+    {
+      "code": "A",
+      "name": "A checkpoint=1min",
+      "text": "The harbor town of Veltmere had kept the same lighthouse for ninety years, and nobody could remember a winter when it had gone dark. Every evening the keeper climbed the narrow stairs, checked the lamp, and wrote a short note in a ledger that no one ever read.\n\nThis autumn the town council met to decide whether the old tower should be repaired or replaced. Three proposals were on the table. The first would restore the original stonework, the second would install a modern automated light, and the third would turn the building into a small museum.\n\nOpinions were divided. The fishing families worried that an automated light would fail during storms, while the shopkeepers hoped that a museum might bring visitors in the quiet months. The chair reminded everyone that the budget was limited, and that a decision could not be postponed past spring.\n\nAfter two long evenings the council agreed on a compromise. The tower would be repaired, the lamp would be upgraded, and a single room at the base would be opened to the public on weekends. The keeper, who had said nothing during the debate, simply nodded and went back to his ledger.",
+      "duration_ms": 1800000,
+      "checkpoint_interval_ms": 60000,
+      "revision_frequency": 4.0,
+      "mistakes": {
+        "grammar": {
+          "enabled": false,
+          "rate": 0.0
+        },
+        "misspelling": {
+          "enabled": true,
+          "rate": 0.01
+        },
+        "substitution": {
+          "enabled": true,
+          "rate": 0.015
+        },
+        "missing_duplicated": {
+          "enabled": true,
+          "rate": 0.008
+        },
+        "punctuation": {
+          "enabled": false,
+          "rate": 0.0
+        },
+        "repetition": {
+          "enabled": true,
+          "rate": 0.005
+        },
+        "abandonment": {
+          "enabled": false,
+          "rate": 0.0
+        },
+        "correction": {
+          "enabled": true,
+          "rate": 0.6
+        }
+      },
+      "pause_rate": 0.15,
+      "insert_chunks": 1,
+      "bulk_threshold_chars": 200,
+      "grace_ms": 300000
+    },
+    {
+      "code": "A",
+      "name": "A checkpoint=5min",
+      "text": "The harbor town of Veltmere had kept the same lighthouse for ninety years, and nobody could remember a winter when it had gone dark. Every evening the keeper climbed the narrow stairs, checked the lamp, and wrote a short note in a ledger that no one ever read.\n\nThis autumn the town council met to decide whether the old tower should be repaired or replaced. Three proposals were on the table. The first would restore the original stonework, the second would install a modern automated light, and the third would turn the building into a small museum.\n\nOpinions were divided. The fishing families worried that an automated light would fail during storms, while the shopkeepers hoped that a museum might bring visitors in the quiet months. The chair reminded everyone that the budget was limited, and that a decision could not be postponed past spring.\n\nAfter two long evenings the council agreed on a compromise. The tower would be repaired, the lamp would be upgraded, and a single room at the base would be opened to the public on weekends. The keeper, who had said nothing during the debate, simply nodded and went back to his ledger.",
+      "duration_ms": 1800000,
+      "checkpoint_interval_ms": 300000,
+      "revision_frequency": 4.0,
+      "mistakes": {
+        "grammar": {
+          "enabled": false,
+          "rate": 0.0
+        },
+        "misspelling": {
+          "enabled": true,
+          "rate": 0.01
+        },
+        "substitution": {
+          "enabled": true,
+          "rate": 0.015
+        },
+        "missing_duplicated": {
+          "enabled": true,
+          "rate": 0.008
+        },
+        "punctuation": {
+          "enabled": false,
+          "rate": 0.0
+        },
+        "repetition": {
+          "enabled": true,
+          "rate": 0.005
+        },
+        "abandonment": {
+          "enabled": false,
+          "rate": 0.0
+        },
+        "correction": {
+          "enabled": true,
+          "rate": 0.6
+        }
+      },
+      "pause_rate": 0.15,
+      "insert_chunks": 1,
+      "bulk_threshold_chars": 200,
+      "grace_ms": 300000
+    },
+    {
+      "code": "A",
+      "name": "A checkpoint=15min",
+      "text": "The harbor town of Veltmere had kept the same lighthouse for ninety years, and nobody could remember a winter when it had gone dark. Every evening the keeper climbed the narrow stairs, checked the lamp, and wrote a short note in a ledger that no one ever read.\n\nThis autumn the town council met to decide whether the old tower should be repaired or replaced. Three proposals were on the table. The first would restore the original stonework, the second would install a modern automated light, and the third would turn the building into a small museum.\n\nOpinions were divided. The fishing families worried that an automated light would fail during storms, while the shopkeepers hoped that a museum might bring visitors in the quiet months. The chair reminded everyone that the budget was limited, and that a decision could not be postponed past spring.\n\nAfter two long evenings the council agreed on a compromise. The tower would be repaired, the lamp would be upgraded, and a single room at the base would be opened to the public on weekends. The keeper, who had said nothing during the debate, simply nodded and went back to his ledger.",
+      "duration_ms": 1800000,
+      "checkpoint_interval_ms": 900000,
+      "revision_frequency": 4.0,
+      "mistakes": {
+        "grammar": {
+          "enabled": false,
+          "rate": 0.0
+        },
+        "misspelling": {
+          "enabled": true,
+          "rate": 0.01
+        },
+        "substitution": {
+          "enabled": true,
+          "rate": 0.015
+        },
+        "missing_duplicated": {
+          "enabled": true,
+          "rate": 0.008
+        },
+        "punctuation": {
+          "enabled": false,
+          "rate": 0.0
+        },
+        "repetition": {
+          "enabled": true,
+          "rate": 0.005
+        },
+        "abandonment": {
+          "enabled": false,
+          "rate": 0.0
+        },
+        "correction": {
+          "enabled": true,
+          "rate": 0.6
+        }
+      },
+      "pause_rate": 0.15,
+      "insert_chunks": 1,
+      "bulk_threshold_chars": 200,
+      "grace_ms": 300000
+    }
+  ]
+}

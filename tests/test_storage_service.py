@@ -7,7 +7,14 @@ from wpl.engine.events import replay
 from wpl.engine.session import FakeClock
 from wpl.engine.simulate import MistakeConfig, SimConfig
 from wpl.service import SessionController, build_plan
-from wpl.storage.db import LATEST_VERSION, Database, DatabaseCorrupt, StorageError, _migrations, quarantine_corrupt
+from wpl.storage.db import (
+    LATEST_VERSION,
+    Database,
+    DatabaseCorrupt,
+    StorageError,
+    _migrations,
+    quarantine_corrupt,
+)
 
 
 def test_migration_v1_to_latest_preserves_data(tmp_path):
@@ -170,3 +177,22 @@ def test_one_character_text_session(db):
     c.start()
     run_to_end(c, clock, 60_000)
     assert c.text == "x" and c.state == "completed"
+
+
+def test_document_text_never_written_to_log(tmp_path, db):
+    import logging
+
+    from wpl.app import setup_logging
+    log_path = setup_logging(tmp_path)
+    secret = "Zanzibar-ultra-secret-phrase unlikely-to-appear-elsewhere."
+    clock = FakeClock()
+    c = SessionController(db, clock)
+    c.create(secret, 60_000, 3, SimConfig(MistakeConfig.default()))
+    c.start()
+    run_to_end(c, clock, 60_000)
+    c.session = None
+    for h in logging.getLogger("wpl").handlers:
+        h.flush()
+    content = log_path.read_text(encoding="utf-8")
+    assert "session created" in content and "completed" in content
+    assert "Zanzibar" not in content and "unlikely" not in content

@@ -1,0 +1,15 @@
+{
+  "schema": "wpl.revision_history/1",
+  "origin": "synthetic",
+  "name": "Example synthetic revision history",
+  "source_description": "Hand-written synthetic example shipped with Writing Process Lab. Not a record of a person's writing.",
+  "initial_text": "",
+  "events": [
+    {"t_ms": 0,     "kind": "insert",     "pos": 0,  "inserted": "The meeting started late."},
+    {"t_ms": 4000,  "kind": "insert",     "pos": 25, "inserted": " Everyone was patient."},
+    {"t_ms": 6000,  "kind": "checkpoint"},
+    {"t_ms": 9000,  "kind": "replace",    "pos": 4,  "removed": "meeting", "inserted": "session"},
+    {"t_ms": 15000, "kind": "delete",     "pos": 25, "removed": " Everyone was patient."}
+  ],
+  "snapshots": []
+}

@@ -1,0 +1,52 @@
+name: windows-release
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Install pinned dependencies (hash-checked)
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r requirements.lock
+          pip install -e . --no-deps
+          pip install pytest ruff pip-audit pyinstaller
+      - name: Lint
+        run: ruff check src tests
+      - name: Tests (offscreen Qt)
+        run: pytest -q
+        env: { QT_QPA_PLATFORM: offscreen }
+      - name: Dependency audit
+        run: pip-audit -r requirements.lock --require-hashes
+      - name: Build one-folder app
+        run: pyinstaller packaging/wpl.spec --noconfirm
+      - name: Build portable one-file exe
+        run: pyinstaller packaging/wpl.spec --noconfirm --distpath dist-portable
+        env: { WPL_ONEFILE: "1" }
+      - name: Self-test the built executables
+        shell: pwsh
+        run: |
+          & .\dist\WritingProcessLab\WritingProcessLab.exe --selftest
+          if ($LASTEXITCODE -ne 0) { throw "one-folder selftest failed" }
+          & .\dist-portable\WritingProcessLab-portable.exe --selftest
+          if ($LASTEXITCODE -ne 0) { throw "portable selftest failed" }
+      - name: Build installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\installer.iss /DAppVersion=0.2.0
+      - name: Checksums
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item dist-portable\WritingProcessLab-portable.exe release\
+          Get-ChildItem release\*.exe | ForEach-Object { "$((Get-FileHash $_ -Algorithm SHA256).Hash)  $($_.Name)" } | Out-File release\SHA256SUMS.txt -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with: { name: windows-release, path: release/ }

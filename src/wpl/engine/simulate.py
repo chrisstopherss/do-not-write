@@ -132,7 +132,7 @@ class SimulationResult:
 
 
 _UNIT_RE = re.compile(r"\S+\s*|\s+")
-_WORD_CORE = re.compile(r"^(\W*)(.*?)(\W*)$", re.S)
+_WORD_CORE = re.compile(r"^(\W*)(.*?)(\W*)$", re.DOTALL)
 
 
 def _mutate_word(word: str, cat: str, rng: random.Random) -> str | None:
@@ -164,7 +164,7 @@ def type_text(b: DocBuilder, text: str, rng: random.Random, cfg: SimConfig,
     pending: list[dict[str, Any]] = []  # corrections waiting to happen: {pos, bad, good, due}
 
     def sentence_of(offset: int) -> int:
-        for i, (a, z) in enumerate(spans):
+        for i, (_a, z) in enumerate(spans):
             if offset < z:
                 return i
         return max(0, len(spans) - 1)

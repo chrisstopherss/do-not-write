@@ -14,7 +14,14 @@ from typing import Any
 
 from ..engine.builder import DocBuilder
 from ..engine.events import Event
-from ..engine.schedule import DEFAULT_GRACE_MS, DeadlineOutcome, add_checkpoints, apply_deadline, fit_to_duration, validate_duration
+from ..engine.schedule import (
+    DEFAULT_GRACE_MS,
+    DeadlineOutcome,
+    add_checkpoints,
+    apply_deadline,
+    fit_to_duration,
+    validate_duration,
+)
 from ..engine.simulate import ALL_CATEGORIES, CategoryStats, MistakeConfig, SimConfig, type_text
 from ..engine.text import WORD_RE, sentence_spans
 
@@ -31,6 +38,10 @@ SYNTH_SENTENCES = ["The matter was noted for the record.", "A follow-up review w
 BULK_THRESHOLD_DEFAULT = 200
 
 
+def display_name(p: ConditionParams) -> str:
+    return p.name or f"{p.code}: {CONDITION_NAMES[p.code]}"
+
+
 def sample_text() -> str:
     return resources.files("wpl.lab").joinpath("sample_text.txt").read_text(encoding="utf-8").strip()
 
@@ -42,6 +53,7 @@ class ParamError(ValueError):
 @dataclass
 class ConditionParams:
     code: str = "A"
+    name: str = ""                        # optional display name (e.g. for parameter sweeps)
     text: str = ""                        # synthetic or explicitly authorized text only
     duration_ms: int = 30 * 60_000
     checkpoint_interval_ms: int | None = 5 * 60_000
@@ -129,7 +141,7 @@ def generate(params: ConditionParams, seed: int) -> RunOutput:
 
     def insert_by_sentence(seg: str, offset: int) -> None:
         spans = sentence_spans(seg)
-        for i, (a, z) in enumerate(spans):
+        for i, (a, _z) in enumerate(spans):
             end = spans[i + 1][0] if i + 1 < len(spans) else len(seg)
             chunk = seg[a:end] if i else seg[:end]
             b.sentence = offset + i

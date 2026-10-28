@@ -8,7 +8,14 @@ from typing import Any
 
 from . import ENGINE_VERSION
 from .engine.events import Event, apply_event
-from .engine.schedule import DEFAULT_GRACE_MS, DeadlineOutcome, add_checkpoints, apply_deadline, fit_to_duration, validate_duration
+from .engine.schedule import (
+    DEFAULT_GRACE_MS,
+    DeadlineOutcome,
+    add_checkpoints,
+    apply_deadline,
+    fit_to_duration,
+    validate_duration,
+)
 from .engine.session import COMPLETED, IDLE, PAUSED, RUNNING, Clock, Session, Snapshot
 from .engine.simulate import SimConfig, simulate
 from .storage.db import Database, StorageError
@@ -124,3 +131,18 @@ class SessionController:
 
 
 _ = RUNNING
+
+
+def analyze_session(db: Database, sid: str) -> dict[str, dict[str, Any]]:
+    """Run all extractors on a stored session, persist the results as a new analysis run, return them."""
+    from .analysis.features import REGISTRY, AnalysisInput, run_extractors
+
+    row = db.get_session(sid)
+    if row is None:
+        raise StorageError("no such session")
+    events = db.get_events(sid)
+    res = run_extractors(AnalysisInput("", row["final_text"] or "", events, row["duration_ms"], row["data_origin"], row["source_text"]))
+    # replay starts from an empty document; source_text is the reference input that was reproduced
+    aid = db.new_analysis_run({k: v.version for k, v in REGISTRY.items()})
+    db.save_features(aid, sid, res)
+    return db.latest_features(sid)

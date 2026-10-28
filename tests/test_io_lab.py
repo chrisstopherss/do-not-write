@@ -1,4 +1,5 @@
 import json
+import re
 import socket
 from pathlib import Path
 
@@ -21,7 +22,8 @@ def test_csv_formula_injection_neutralized(v):
 
 def test_csv_numbers_and_none_unchanged_and_quoting():
     out = X.to_csv(["a", "b", "c"], [[-5, None, 'he said "hi", ok\nnext']])
-    import csv, io
+    import csv
+    import io
     row = list(csv.reader(io.StringIO(out)))[1]
     assert row == ["-5", "", 'he said "hi", ok\nnext']
 
@@ -216,11 +218,13 @@ def test_evaluation_skips_missing_feature():
 def test_no_network_apis_in_source():
     root = Path(__file__).resolve().parents[1] / "src" / "wpl"
     banned = ("import socket", "import urllib", "import http", "import requests", "import ftplib", "import smtplib",
-              "import subprocess", "os.system", "eval(", "exec(", "pickle", "marshal", "QtNetwork", "webbrowser")
+              "import subprocess", "os.system", "pickle", "marshal", "QtNetwork", "webbrowser")
     for f in root.rglob("*.py"):
         text = f.read_text(encoding="utf-8")
         for b in banned:
             assert b not in text, f"{b!r} found in {f}"
+        # bare eval()/exec() builtins (method calls such as QDialog.exec() are fine)
+        assert not re.search(r"(?<![\w.])(eval|exec)\(", text), f"eval/exec builtin used in {f}"
 
 
 def test_lab_runs_with_network_disabled(monkeypatch, db):
@@ -235,3 +239,21 @@ def test_lab_runs_with_network_disabled(monkeypatch, db):
 
 def test_registry_has_versions():
     assert all(e.version and e.description for e in REGISTRY.values())
+
+
+def test_example_configs_load_and_run(db):
+    import glob
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "examples"
+    files = sorted(glob.glob(str(root / "experiment_*.json")))
+    assert len(files) >= 4
+    for f in files:
+        doc = json.loads(Path(f).read_text(encoding="utf-8"))
+        assert doc["schema"] == "wpl.experiment_config/1"
+        conds = [ConditionParams.from_dict(c) for c in doc["conditions"]]
+        eid = run_experiment(db, doc["title"], conds, 1, doc["base_seed"], expected=doc["expected"])
+        assert len(db.experiment_runs(eid)) == len(conds)
+    from wpl.engine.simulate import MistakeConfig
+    MistakeConfig.from_dict(json.loads((root / "mistake_config_default.json").read_text())["mistakes"]).validate()
+    assert import_text(db, (root / "revision_history_example.json").read_text(encoding="utf-8")).events == 5

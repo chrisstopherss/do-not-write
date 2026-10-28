@@ -1,0 +1,37 @@
+{
+  "schema": "wpl.mistake_config/1",
+  "mistakes": {
+    "grammar": {
+      "enabled": false,
+      "rate": 0.0
+    },
+    "misspelling": {
+      "enabled": true,
+      "rate": 0.01
+    },
+    "substitution": {
+      "enabled": true,
+      "rate": 0.015
+    },
+    "missing_duplicated": {
+      "enabled": true,
+      "rate": 0.008
+    },
+    "punctuation": {
+      "enabled": false,
+      "rate": 0.0
+    },
+    "repetition": {
+      "enabled": true,
+      "rate": 0.005
+    },
+    "abandonment": {
+      "enabled": false,
+      "rate": 0.0
+    },
+    "correction": {
+      "enabled": true,
+      "rate": 0.6
+    }
+  }
+}

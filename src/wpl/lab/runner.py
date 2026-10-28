@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from typing import Any
 
 from .. import ENGINE_VERSION
 from ..analysis.features import REGISTRY, AnalysisInput, run_extractors
@@ -42,7 +41,7 @@ def run_experiment(db: Database, label: str, conditions: list[ConditionParams], 
             db.add_events(sid, out.events)
             db.update_session(sid, final_text=out.final_text, status="completed", progress_cursor=len(out.events),
                               deadline_json=json.dumps(asdict(out.deadline)))
-            feats = run_extractors(AnalysisInput("", out.final_text, out.events, params.duration_ms, "simulated"))
+            feats = run_extractors(AnalysisInput("", out.final_text, out.events, params.duration_ms, "simulated", params.text))
             db.save_features(aid, sid, feats)
             db.add_run(eid, cid, sid, rep, seed, "completed")
     db.conn.execute("UPDATE experiments SET status='completed' WHERE id=?", (eid,))
