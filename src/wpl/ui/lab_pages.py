@@ -15,12 +15,14 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPlainTextEdit,
+    QScrollArea,
     QSpinBox,
     QTabWidget,
     QTextBrowser,
@@ -47,14 +49,16 @@ from ..lab.overview import (
     interval_hist,
     kind_counts,
     revision_size_hist,
+    rhythm_comparison,
     session_row,
+    session_schedule,
     summary_counts,
 )
 from ..lab.runner import create_example_experiment, run_experiment
 from ..lab.templates import TEMPLATES
 from ..storage.db import Database
 from . import theme
-from .charts import BarChart, ConfusionWidget, LineChart, TimelineChart
+from .charts import BarChart, ConfusionWidget, LineChart, RhythmTimeline, TimelineChart
 from .session_pages import diff_html
 from .widgets import button, card, fill, fmt_ms, hbox, label, table
 
@@ -132,7 +136,7 @@ class OverviewTab(Tab):
         self.detail = label("", "muted")
         self.lay.addWidget(self.detail)
         self.table = table(["Condition", "Rep", "Origin", "Seed", "Words: source", "Words: final", "Duration", "Insertions", "Deletions",
-                            "Replacements", "Checkpoints", "Revisions", "Pauses", "Validation", "Completeness"])
+                            "Replacements", "Checkpoints", "Revisions", "Pauses", "Breaks", "Idle (sim.)", "Validation", "Completeness"])
         self.lay.addWidget(self.table, 1)
         self.msg = label("", "muted")
         self.lay.addWidget(self.msg)
@@ -182,7 +186,7 @@ class OverviewTab(Tab):
         fill(self.table, [[r["condition"] or "-", nr(r["rep"]), ORIGIN_LABEL.get(r["origin"], r["origin"]), nr(r["seed"]),
                            str(r["words_source"]), nr(r["words_final"]), fmt_ms(r["duration_ms"]) if r["duration_ms"] else "Not recorded",
                            nr(r["insertions"]), nr(r["deletions"]), nr(r["replacements"]), nr(r["checkpoints"]), nr(r["revisions"]),
-                           nr(r["pauses"]), r["validation"], r["completeness"]] for r in rows])
+                           nr(r["pauses"]), nr(r["breaks"]), fmt_ms(r["idle_ms"]), r["validation"], r["completeness"]] for r in rows])
         self._rows = rows
 
     def _example(self) -> None:
@@ -194,7 +198,7 @@ class OverviewTab(Tab):
         sids = [r["session_id"] for r in self._rows]
         sessions = [(self.db.get_session(s), self.db.get_events(s)) for s in sids]
         if kind == "json":
-            content = X.dataset_json(self.combo.currentText(), [X.session_dict(row, ev, ensure_features(self.db, row["id"])) for row, ev in sessions])
+            content = X.dataset_json(self.combo.currentText(), [X.session_dict(row, ev, ensure_features(self.db, row["id"]), self.db.get_user_actions(row["id"])) for row, ev in sessions])
             ext = "json"
         else:
             content = X.metrics_csv([(row["id"], row["data_origin"], _as_results(ensure_features(self.db, row["id"]))) for row, _ in sessions])
@@ -465,6 +469,126 @@ class ChartsTab(Tab):
         self.cmp.title = f"Mean {self.metric_box.currentText().lower()} per condition"
         self.cmp.set_data(short, {self.metric_box.currentText(): vals})
         self.cmp_note.setText("Conditions: " + "; ".join(cats) + (". Runs excluded for missing metric: " + str(missing) if missing else "."))
+
+
+class RhythmTab(Tab):
+    """Writing rhythm analytics: per-session distributions and profile comparison. Simulated clock; descriptive only."""
+
+    def __init__(self, db: Database) -> None:
+        super().__init__(db)
+        scroll = QScrollArea()  # this tab has more content than fits a window, so it scrolls
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setAccessibleName("Rhythm analytics")
+        inner = QWidget()
+        inner.setObjectName("page")
+        scroll.setWidget(inner)
+        self.lay.addWidget(scroll)
+        self.lay = QVBoxLayout(inner)
+        self.lay.setContentsMargins(0, 0, 8, 0)
+        self.lay.addWidget(label("Rhythm statistics describe the pauses and breaks in the stored event data. In this version all pauses and "
+                                 "breaks are SIMULATED by the engine; the only real application telemetry is your own pause, resume and cancel "
+                                 "actions (shown as markers). Break lengths are experimental parameters and say nothing about how a text was "
+                                 "written. Sessions without recorded pauses show Not recorded, not zero.", "banner_info"))
+        row = QHBoxLayout()
+        self.exp = QComboBox()
+        self.exp.setAccessibleName("Experiment")
+        self.exp.currentIndexChanged.connect(self._compare)
+        row.addWidget(label("Compare rhythm profiles in:", wrap=False))
+        row.addWidget(self.exp, 1)
+        self.lay.addLayout(row)
+        self.cmp = table(["Condition / profile", "Runs", "Active (mean)", "Idle (mean)", "Breaks (mean)", "Avg break (mean)", "Longest break (max)",
+                          "Text per active interval", "Revisions/min before breaks", "Revisions/min after breaks", "Runs without data"])
+        self.cmp.setMinimumHeight(170)
+        self.cmp.setMaximumHeight(200)
+        self.lay.addWidget(self.cmp)
+        self.cmp_note = label("", "muted")
+        self.lay.addWidget(self.cmp_note)
+        row2 = QHBoxLayout()
+        self.combo = QComboBox()
+        self.combo.setAccessibleName("Session")
+        self.combo.currentIndexChanged.connect(self._session)
+        row2.addWidget(label("Session:", wrap=False))
+        row2.addWidget(self.combo, 1)
+        self.lay.addLayout(row2)
+        self.timeline = RhythmTimeline()
+        self.lay.addWidget(self.timeline)
+        g = QGridLayout()
+        self.pauses = BarChart("Pause and break durations (bin lower bound)", "count", "Not recorded: no pauses or breaks in this session.")
+        self.intervals = BarChart("Writing-interval lengths (bin lower bound)", "count", "Not recorded for this session.")
+        self.added = BarChart("Text added per active interval (characters)", "chars", "Not recorded for this session.")
+        self.around = BarChart("Revisions per active minute, before vs after breaks", "per minute", "Needs at least one break.")
+        g.addWidget(self.pauses, 0, 0)
+        g.addWidget(self.intervals, 0, 1)
+        g.addWidget(self.added, 1, 0)
+        g.addWidget(self.around, 1, 1)
+        self.lay.addLayout(g)
+        self.sum = label("", "muted")
+        self.lay.addWidget(self.sum)
+        self.ids: list[str] = []
+        self.eids: list[str] = []
+        self.refresh()
+
+    def refresh(self) -> None:
+        self.ids = populate_sessions(self.db, self.combo, with_events=True)
+        self.exp.blockSignals(True)
+        self.exp.clear()
+        self.eids = []
+        for e in self.db.list_experiments():
+            self.exp.addItem(e["label"])
+            self.eids.append(e["id"])
+        self.exp.blockSignals(False)
+        self._compare()
+        self._session()
+
+    def _compare(self) -> None:
+        i = self.exp.currentIndex()
+        if i < 0 or not self.eids:
+            self.cmp.setRowCount(0)
+            self.cmp_note.setText("No experiments yet. Run the template 'Rhythm profiles' in the Experiments tab.")
+            return
+        rows = rhythm_comparison(self.db, self.eids[i])
+        f = lambda v: "Not recorded" if v is None else fmt_ms(v)  # noqa: E731
+        n = lambda v: "Not recorded" if v is None else f"{v:.2f}"  # noqa: E731
+        fill(self.cmp, [[r["condition"], str(r["runs"]), f(r["active_ms"]), f(r["idle_ms"]), n(r["breaks"]), f(r["avg_break_ms"]), f(r["longest_break_ms"]),
+                         n(r["text_per_interval"]), n(r["rev_per_min_before"]), n(r["rev_per_min_after"]), str(r["runs_without_rhythm_data"])] for r in rows])
+        small = min((r["runs"] for r in rows), default=0)
+        self.cmp_note.setText("Means over runs, SIMULATED data. " + (f"Only {small} run(s) per condition: differences are illustrative, not statistically supported. " if small < 30 else "")
+                              + "Runs without recorded pauses are excluded from rhythm means and counted in the last column.")
+
+    def _session(self) -> None:
+        i = self.combo.currentIndex()
+        if not self.ids or i < 0:
+            self.timeline.set_schedule([])
+            for c in (self.pauses, self.intervals, self.added, self.around):
+                c.set_data([], {})
+            self.sum.setText("No sessions with stored events yet.")
+            return
+        sid = self.ids[i]
+        segs, total, markers = session_schedule(self.db, sid)
+        s = self.db.get_session(sid)
+        paused_known = "rhythm" in json.loads(s["config_json"]) or any(k == "pause" for k in (e.kind for e in self.db.get_events(sid)))
+        self.timeline.set_schedule(segs if paused_known else [], total, markers)
+        f = ensure_features(self.db, sid)
+        g = lambda k: f.get(k, {}).get("value") if f.get(k, {}).get("status") == "ok" else None  # noqa: E731
+        pd, ai, tp, ra = g("rhythm.pause_duration_distribution"), g("rhythm.active_interval_distribution"), g("rhythm.text_added_per_active_interval"), g("rhythm.revisions_around_breaks")
+        def bins(h: dict) -> list[str]:  # "5000-9999" -> "5s", "300000+" -> "300s+": lower bound in seconds keeps labels short
+            return [f"{int(k.rstrip('+').split('-')[0]) / 1000:g}s" + ("+" if k.endswith("+") else "") for k in h]
+        self.pauses.set_data(bins(pd["histogram"]) if pd else [], {"pauses": [float(v) for v in pd["histogram"].values()]} if pd else {})
+        self.intervals.set_data(bins(ai["histogram"]) if ai else [], {"intervals": [float(v) for v in ai["histogram"].values()]} if ai else {})
+        self.added.set_data([str(k + 1) for k in range(len(tp["per_interval"]))] if tp else [], {"chars": [float(v) for v in tp["per_interval"]]} if tp else {})
+        self.around.set_data(["before breaks", "after breaks"] if ra else [], {"revisions/min": [ra["per_active_minute_before"], ra["per_active_minute_after"]]} if ra else {})
+        parts = [f"Data source: {', '.join(g('rhythm.rhythm_data_sources') or ['unknown'])}."]
+        for label_, k in (("Active (sim.)", "rhythm.sim_active_ms"), ("Idle (sim.)", "rhythm.sim_idle_ms")):
+            v = g(k)
+            parts.append(f"{label_}: {fmt_ms(v) if v is not None else 'Not recorded'}.")
+        for label_, k in (("Breaks", "rhythm.break_count"), ("Short pauses", "rhythm.short_pause_count")):
+            v = g(k)
+            parts.append(f"{label_}: {v if v is not None else 'Not recorded'}.")
+        for label_, k in (("Average break", "rhythm.avg_break_ms"), ("Longest break", "rhythm.longest_break_ms")):
+            v = g(k)
+            parts.append(f"{label_}: {fmt_ms(v) if v is not None else 'Not recorded'}.")
+        self.sum.setText(" ".join(parts))
 
 
 class ExperimentsTab(Tab):
@@ -776,7 +900,9 @@ EVENT_TABLE = [
     ["insert / delete / replace", "SIMULATED (engine) or IMPORTED", "When a session or experiment runs, or a dataset is imported", "Affected text fragments, position, time", "Until you delete them"],
     ["checkpoint", "SIMULATED or IMPORTED", "At the configured checkpoint interval", "A marker only; versions are rebuilt from events (no duplicate text)", "Until you delete the session"],
     ["pause / resume (simulated)", "SIMULATED", "Generated by the engine between sentences", "Time and duration", "Until you delete the session"],
-    ["User pause / cancel / crash", "Session status (not an event)", "When you press Pause/Cancel, or after an unclean exit", "Status field and progress counter only", "Until you delete the session"],
+    ["pause / resume with a duration (rhythm)", "SIMULATED", "Planned by the break scheduler: short pauses and breaks (up to 5 minutes), with start and end", "Time, duration, class (short or break)", "Until you delete the session"],
+    ["User pause / resume / cancel", "REAL application telemetry (CAPTURED)", "When you press Pause, Resume or Cancel in a session", "Session-clock time and the phase you were in (Writing, Break, Paused). No text, no clipboard, no keystrokes. Stored in the separate user_actions table", "Until you delete the session"],
+    ["Crash / unclean exit", "Session status", "Detected at next start", "Status field and progress counter only", "Until you delete the session"],
     ["paste / import (captured)", "Not collected by this version", "-", "The app never reads the clipboard except when you press Paste in New session; that text becomes the session's source text and is not logged as an event", "-"],
     ["cursor_move", "Not collected by this version", "-", "-", "-"],
     ["external input", "Not implemented", "-", "No external typing or window integration exists", "-"],
@@ -852,13 +978,14 @@ class LabPage(QWidget):
         self.timeline = TimelineTab(db)
         self.revisions = RevisionsTab(db)
         self.charts = ChartsTab(db)
+        self.rhythm = RhythmTab(db)
         self.experiments = ExperimentsTab(db)
         self.evaluation = EvaluationTab(db)
         self.finaltext = FinalTextTab(db)
         self.importer = ImportTab(db)
         self.guide = GuideTab(db)
         self.privacy = PrivacyTab(db, data_dir)
-        for w, n in ((self.overview, "Overview"), (self.timeline, "Timeline"), (self.revisions, "Revisions"), (self.charts, "Charts"),
+        for w, n in ((self.overview, "Overview"), (self.timeline, "Timeline"), (self.revisions, "Revisions"), (self.charts, "Charts"), (self.rhythm, "Rhythm"),
                      (self.experiments, "Experiments"), (self.evaluation, "Evaluation"), (self.finaltext, "Final text"),
                      (self.importer, "Import"), (self.guide, "Guide"), (self.privacy, "Data && privacy")):
             self.tabs.addTab(w, n)
@@ -866,7 +993,7 @@ class LabPage(QWidget):
             w.changed.connect(self.refresh_all)
 
     def refresh_all(self) -> None:
-        for w in (self.overview, self.timeline, self.revisions, self.charts, self.evaluation, self.importer, self.privacy):
+        for w in (self.overview, self.timeline, self.revisions, self.charts, self.rhythm, self.evaluation, self.importer, self.privacy):
             w.refresh()
         self.data_changed.emit()
 _ = Event, Qt, theme, diff_html

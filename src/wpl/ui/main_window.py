@@ -167,11 +167,11 @@ class MainWindow(QMainWindow):
         for c in self.findChildren(ChartBase):
             c.update()
 
-    def _start(self, text: str, ms: int, seed: int, cfg, label_: str) -> None:
+    def _start(self, text: str, ms: int, seed: int, cfg, label_: str, rhythm=None) -> None:
         try:
             ctl = SessionController(self.db)
-            ctl.create(text, ms, seed, cfg, label=label_)
-        except (ValueError, StorageError) as exc:
+            ctl.create(text, ms, seed, cfg, label=label_, rhythm=rhythm)
+        except (ValueError, StorageError) as exc:  # includes InfeasibleSchedule (a ValueError with an explanation)
             QMessageBox.warning(self, "Cannot start session", str(exc))
             log.error("session start failed: %s", type(exc).__name__)
             return
@@ -197,7 +197,9 @@ class MainWindow(QMainWindow):
             return
         cfg = json.loads(row["config_json"])
         self.new_page.set_text(row["source_text"])
-        self.new_page.load_config(SimConfig.from_dict(cfg["sim"]), row["seed"], row["duration_ms"])
+        from ..engine.rhythm import RhythmConfig
+        rh = RhythmConfig.from_dict(cfg["rhythm"]) if "rhythm" in cfg else None
+        self.new_page.load_config(SimConfig.from_dict(cfg["sim"]), row["seed"], row["duration_ms"], rh)
         self.nav.setCurrentRow(0)
 
     def _resume(self, sid: str) -> None:

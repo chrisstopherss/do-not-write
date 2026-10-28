@@ -52,6 +52,8 @@ class AnalysisInput:
     duration_ms: int | None = None
     origin: str = "simulated"  # synthetic | simulated | imported | captured (data origin of the session)
     source_text: str = ""      # the original input that was reproduced, if any (reference for text_diff)
+    user_actions: list[dict[str, Any]] = field(default_factory=list)  # real app telemetry: pause/resume/cancel
+    pauses_recorded: bool = False  # True when the producer records pauses/breaks (so zero breaks is a real zero)
 
 
 def summarize(vals: list[float]) -> dict[str, Any]:
@@ -229,3 +231,6 @@ def run_extractors(a: AnalysisInput, ids: list[str] | None = None) -> dict[str, 
 
 
 _ = re  # re kept for extractor authors
+
+
+from . import rhythm as _rhythm  # noqa: E402,F401  (registers the 'rhythm' extractor)

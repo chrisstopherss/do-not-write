@@ -16,6 +16,7 @@ analytics, a research lab for comparing workflows, and exports. Everything stays
 | Mistake engine (8 categories, defined denominators, seeds) | Implemented, tested |
 | UI: New session, Active session, History/results, Settings | Implemented (screenshot-checked offscreen, 11 UI tests) |
 | Writing Process Lab: overview, timeline, revisions, charts, experiments A-E, evaluation, final-text research, import, guide, data & privacy | Implemented, tested |
+| Writing rhythm modes (Regular / Reflective / Extended Breaks / Custom), break scheduler, rhythm analytics and Rhythm tab | Implemented, tested (see below) |
 | SQLite storage with migrations, local deletion controls | Implemented, tested |
 | Exports: TXT, Markdown, HTML, JSON, CSV (formula-injection safe) | Implemented, tested. **DOCX not implemented** |
 | Dictionary spelling / grammar-pattern analysis modules | **Not implemented** |
@@ -23,7 +24,7 @@ analytics, a research lab for comparing workflows, and exports. Everything stays
 | Windows exe, installer | Build files written (`packaging/`, CI workflow). **Never built or run on Windows.** Linux build of the same spec was made and self-tested |
 | Code signing, app icon, license file | Not done |
 
-140 automated tests pass on Linux (see `docs/testing-report.md`, including what was not run).
+217 automated tests pass on Linux (see `docs/testing-report.md`, including what was not run).
 
 ## Run from source
 ```bash
@@ -34,6 +35,14 @@ python -m wpl --selftest      # non-interactive release check
 pip install pytest ruff && pytest -q && ruff check src tests
 ```
 Data: `%LOCALAPPDATA%\WritingProcessLab` (Windows) or `~/.local/share/WritingProcessLab`; override with `WPL_DATA_DIR`.
+
+## Writing rhythm and breaks (v0.3)
+Session configuration has a **Writing rhythm** section: four modes, editable custom parameters with validation limits
+(pauses up to 60 s, breaks up to 5 minutes), *Preview schedule*, and *Reset to defaults*. The selected duration includes the
+breaks; if they cannot fit, the app explains why and offers a longer duration or less break time. While running, the page shows
+Writing / Break / Paused / Completed, elapsed and remaining time, active vs idle time, and a timeline. The Lab has a **Rhythm** tab
+comparing profiles. These are experimental timing parameters for studying process statistics: no mode is meant to resemble human
+authorship or avoid detection, and none was tuned against any detector.
 
 ## Using it
 1. **New session**: paste or import text, pick a duration (30 min / 1 h / 2 h / custom up to 24 h), set mistake categories,

@@ -1,11 +1,11 @@
 """Experiment orchestration: conditions x repetitions -> stored sessions, events and features."""
 from __future__ import annotations
 
-import json
 from dataclasses import asdict
 
 from .. import ENGINE_VERSION
 from ..analysis.features import REGISTRY, AnalysisInput, run_extractors
+from ..service import deadline_json
 from ..storage.db import Database
 from .conditions import ConditionParams, generate, sample_text
 
@@ -28,6 +28,17 @@ def run_experiment(db: Database, label: str, conditions: list[ConditionParams], 
     for c in conditions:
         c.validate()
     eid = db.create_experiment(label, notes, expected, is_example)
+    try:
+        _populate(db, eid, label, conditions, reps, base_seed)
+    except Exception:
+        db.delete_experiment(eid)  # all-or-nothing: no half-built experiment (e.g. an infeasible break schedule)
+        raise
+    db.conn.execute("UPDATE experiments SET status='completed' WHERE id=?", (eid,))
+    db.conn.commit()
+    return eid
+
+
+def _populate(db: Database, eid: str, label: str, conditions: list[ConditionParams], reps: int, base_seed: int) -> None:
     aid = db.new_analysis_run({k: v.version for k, v in REGISTRY.items()})
     for ci, params in enumerate(conditions):
         cid = db.add_condition(eid, params.code, params.to_dict(), ground_truth="")
@@ -40,13 +51,11 @@ def run_experiment(db: Database, label: str, conditions: list[ConditionParams], 
                                     label=f"{label} / {params.code} / rep {rep + 1}", status="completed", origin="simulated")
             db.add_events(sid, out.events)
             db.update_session(sid, final_text=out.final_text, status="completed", progress_cursor=len(out.events),
-                              deadline_json=json.dumps(asdict(out.deadline)))
-            feats = run_extractors(AnalysisInput("", out.final_text, out.events, params.duration_ms, "simulated", params.text))
+                              deadline_json=deadline_json(out.deadline))
+            feats = run_extractors(AnalysisInput("", out.final_text, out.events, params.duration_ms, "simulated", params.text,
+                                                 [], params.rhythm is not None and params.code in ("A", "E")))
             db.save_features(aid, sid, feats)
             db.add_run(eid, cid, sid, rep, seed, "completed")
-    db.conn.execute("UPDATE experiments SET status='completed' WHERE id=?", (eid,))
-    db.conn.commit()
-    return eid
 
 
 def create_example_experiment(db: Database) -> str:

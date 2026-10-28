@@ -45,7 +45,13 @@ def selftest() -> int:
     with tempfile.TemporaryDirectory() as td:
         d = Path(td)
         db = Database(d / "wpl.db")
-        check("database created and migrated", db.version() >= 2)
+        check("database created and migrated (incl. user_actions)", db.version() >= 3)
+        from .engine.breaks import plan_rhythm
+        from .engine.rhythm import preset
+        from .engine.simulate import MistakeConfig, SimConfig
+        from .lab.conditions import sample_text
+        plan = plan_rhythm(sample_text(), 7, SimConfig(MistakeConfig.default()), preset("reflective"), 3_600_000)
+        check("break scheduler plans a session inside its time budget", plan.summary.total_ms <= 3_600_000 and plan.summary.idle_ms > 0)
         eid = create_example_experiment(db)
         rows = experiment_rows(db, eid)
         check("example experiment (25 runs) from stored data", len(rows) == 25)

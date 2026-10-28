@@ -18,7 +18,7 @@ pyinstaller packaging/wpl.spec --noconfirm
 dist\WritingProcessLab\WritingProcessLab.exe --selftest
 ```
 Portable single file: set `WPL_ONEFILE=1` and run PyInstaller again (output `dist\WritingProcessLab-portable.exe`).
-Installer: `iscc packaging\installer.iss /DAppVersion=0.2.0` (output in `release\`).
+Installer: `iscc packaging\installer.iss /DAppVersion=0.3.0` (output in `release\`).
 
 CI equivalent: `.github/workflows/windows-release.yml` (manual or on `v*` tags). It has never been run.
 

@@ -7,7 +7,7 @@ Environment: Linux container, Python 3.13.17, PySide6-Essentials 6.12.0, pytest 
 
 | Check | Command | Result |
 |---|---|---|
-| Automated tests | `pytest -q` | **140 passed**, 0 failed, 0 skipped (~25 s) |
+| Automated tests | `pytest -q` | **217 passed**, 0 failed, 0 skipped (~25 s) |
 | Lint | `ruff check src tests` (rules E,F,W,I,B) | all checks passed |
 | Dependency audit | `pip-audit -r requirements.lock --require-hashes` | no known vulnerabilities (uses the network from the dev machine; the app does not) |
 | Selftest from source | `python -m wpl --selftest` | 5/5 checks pass |
@@ -43,3 +43,6 @@ Environment: Linux container, Python 3.13.17, PySide6-Essentials 6.12.0, pytest 
 * Spelling dictionary and grammar-pattern analysis modules, DOCX export, app icon, settings for default duration / default
   mistake configuration / export preferences / retention, and a "load experiment config from file" button are **not implemented**.
 * Python 3.13 was used for testing; the project declares >=3.12 and CI pins 3.12.
+
+## v0.3 (writing rhythm) additions
+217 tests pass (66 in `test_rhythm.py`, 22 UI tests), ruff clean, `pip-audit` clean, frozen Linux build selftest passes (6 checks). Legacy planner output is pinned by golden hashes and unchanged. Not run: Windows build/installer (CI does this on tag push; see the release page), screen readers.

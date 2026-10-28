@@ -69,14 +69,16 @@ def dataset_json(name: str, sessions: list[dict[str, Any]]) -> str:
     return json.dumps(doc, indent=2, sort_keys=True, ensure_ascii=False)
 
 
-def session_dict(row: Any, events: list[Event], features: dict[str, Any] | None = None) -> dict[str, Any]:
+def session_dict(row: Any, events: list[Event], features: dict[str, Any] | None = None,
+                 user_actions: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     return {"id": row["id"], "label": row["label"], "created_at": row["created_at"], "data_origin": row["data_origin"],
             "status": row["status"], "duration_ms": row["duration_ms"], "seed": row["seed"],
             "engine_version": row["engine_version"], "app_version": row["app_version"],
             "config": json.loads(row["config_json"]), "source_text": row["source_text"], "final_text": row["final_text"],
             "events": [{"seq": e.seq, "t_ms": e.t_ms, "kind": e.kind, "source": e.source, "pos": e.pos, "removed": e.removed,
                         "inserted": e.inserted, "duration_ms": e.duration_ms, "meta": e.meta} for e in events],
-            **({"features": features} if features is not None else {})}
+            **({"features": features} if features is not None else {}),
+            **({"user_actions": [{**a, "source": "captured"} for a in user_actions]} if user_actions is not None else {})}
 
 
 def _fmt(v: Any) -> str:

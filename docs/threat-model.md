@@ -16,6 +16,7 @@ connections. This is not a claim that the app is perfectly secure.
 | Interrupted session / crash | Progress persisted as events play; startup marks sessions `interrupted`; resume rebuilds the plan and verifies it matches stored events | Resume refuses if the engine version changed |
 | Unauthorized external input | Feature not implemented: the app never sends input to other applications | - |
 | Misuse to misrepresent authorship | See `docs/03-scope-decisions.md`. Outputs are labeled SIMULATED/SYNTHETIC everywhere and the app has no external typing, no Google integration, no detector evasion | Exported text is plain text and can be passed off by someone determined; labels in files can be edited |
+| Rhythm modes used to dress up synthetic activity as human | No preset is tuned against any detector or labeled human-like/undetectable; every pause and break is stored as SIMULATED with its seed; real user actions are kept separate and labeled captured; guide text states the limits | Someone can still copy exported text; labels in files can be edited |
 | Unsigned binaries | Not signed; Windows SmartScreen will warn. Signing requires an Authenticode certificate (typically a few hundred USD/year for OV/EV) | Users cannot verify publisher identity; use the published SHA-256 sums |
 
 Assumptions: the user's OS account is trusted; the machine is not already compromised; the Python/Qt runtime is genuine.

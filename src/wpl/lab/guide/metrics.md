@@ -58,3 +58,25 @@ From a confusion matrix (positive = the labeled class): precision = TP/(TP+FP); 
 specificity = TN/(TN+FP); false-positive rate = FP/(FP+TN); false-negative rate = FN/(FN+TP). Undefined ratios
 (zero denominator) are shown as undefined, not 0. Intervals are 95% Wilson score intervals. Fewer than 30 samples in a
 class triggers a warning. Thresholds are chosen on the train split only.
+
+## Rhythm metrics (extractor `rhythm`, simulated clock)
+
+Pauses are events of kind `pause` with a recorded `duration_ms`; a *break* has `pause_class = break`, other pauses are
+*short pauses*. If a session did not record pauses at all, every metric below is **missing**, not zero.
+
+| Metric | Definition |
+|---|---|
+| rhythm_data_sources | Distinct event sources in the data (simulated / captured / imported) |
+| sim_total_ms | Session-clock time from start to the last event (or to the cancel action if the session was cancelled) |
+| sim_idle_ms | Sum of short-pause and break lengths (the portion of a pause before the total ends) |
+| sim_active_ms | sim_total_ms - sim_idle_ms |
+| break_count / short_pause_count | Number of pauses with / without class `break` |
+| break_total_ms, avg_break_ms, longest_break_ms | Sum, mean and maximum break length (avg and longest are missing if there are no breaks) |
+| incomplete_breaks | Pauses whose end was not reached: cancelled during the pause, or no resume recorded and no cancel. A cancelled break counts up to the cancel time; a break with unknown end is excluded from the other metrics |
+| pause_duration_distribution | n, min, max, mean, median, stdev and a histogram of all pause/break lengths |
+| active_interval_distribution | Same for the lengths of writing intervals (time between pauses) |
+| text_added_per_active_interval | Characters inserted by text events inside each writing interval; reported with the per-interval list |
+| revisions_around_breaks | For each break: delete/replace events in the writing interval immediately before and after it, summed, with the active time of those intervals and the resulting per-active-minute rates |
+
+All durations are on the simulated session clock. Manual pauses by the user stop that clock and are not part of these
+numbers; they are recorded separately as real user actions.

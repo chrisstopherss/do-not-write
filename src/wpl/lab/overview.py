@@ -23,7 +23,8 @@ def ensure_features(db: Database, sid: str) -> dict[str, dict[str, Any]]:
     """Stored features if present and from current extractor versions, otherwise computed from stored events and saved."""
     f = db.latest_features(sid)
     cur = {f"{k}": v.version for k, v in REGISTRY.items()}
-    if f and all(v["version"] == cur.get(k.split(".")[0], v["version"]) for k, v in f.items()):
+    have = {k.split(".")[0] for k in f}
+    if f and have >= set(cur) and all(v["version"] == cur.get(k.split(".")[0], v["version"]) for k, v in f.items()):
         return f
     return analyze_session(db, sid)
 
@@ -59,6 +60,7 @@ def session_row(db: Database, sid: str) -> dict[str, Any]:
             "insertions": g("process_events.insertions"), "deletions": g("process_events.deletions"),
             "replacements": g("process_events.replacements"), "checkpoints": g("process_events.checkpoint_count"),
             "revisions": g("process_events.revision_events"), "pauses": g("process_events.pause_count"),
+            "breaks": g("rhythm.break_count"), "idle_ms": g("rhythm.sim_idle_ms"),
             "events": len(events), "validation": validation, "completeness": completeness,
             "condition": cfg.get("params", {}).get("code", ""), "rep": cfg.get("rep")}
 
@@ -125,7 +127,10 @@ def interval_hist(events: list[Event]) -> tuple[list[str], list[float | None]]:
     return labels, [float(sum(1 for g in gaps if g >= lo and (hi is None or g < hi))) for lo, hi in zip(INTERVAL_EDGES, INTERVAL_EDGES[1:] + [None], strict=True)]
 
 
-METRIC_CHOICES = {"Total events": "process_events.total_events", "Insertions": "process_events.insertions",
+METRIC_CHOICES = {"Breaks": "rhythm.break_count", "Short pauses": "rhythm.short_pause_count", "Idle time (ms, simulated)": "rhythm.sim_idle_ms",
+                  "Active time (ms, simulated)": "rhythm.sim_active_ms", "Average break (ms)": "rhythm.avg_break_ms",
+                  "Longest break (ms)": "rhythm.longest_break_ms",
+                  "Total events": "process_events.total_events", "Insertions": "process_events.insertions",
                   "Deletions": "process_events.deletions", "Replacements": "process_events.replacements",
                   "Revision events": "process_events.revision_events", "Inserted characters": "process_events.inserted_chars",
                   "Removed characters": "process_events.removed_chars", "Checkpoints": "process_events.checkpoint_count",
@@ -149,3 +154,44 @@ def condition_means(db: Database, eid: str, metric_key: str) -> tuple[list[str],
         else:
             missing[c] = missing.get(c, 0) + 1
     return order, [statistics.fmean(by[c]) if c in by else None for c in order], missing
+
+
+def _mean(vals: list[float]) -> float | None:
+    return statistics.fmean(vals) if vals else None
+
+
+def rhythm_comparison(db: Database, eid: str) -> list[dict[str, Any]]:
+    """Per-condition means of the rhythm metrics, from stored features. Runs where a metric is not recorded are
+    excluded from that metric's mean and counted in ``missing``. Descriptive only."""
+    by: dict[str, list[dict[str, Any]]] = {}
+    for row in experiment_rows(db, eid):
+        by.setdefault(row["condition"], []).append(ensure_features(db, row["session_id"]))
+    out = []
+    for cond, runs in by.items():
+        def col(key: str, runs=runs) -> list[float]:
+            vals = [feature_value(f, key) for f in runs]
+            return [float(v) for v in vals if isinstance(v, (int, float))]
+
+        def sub(key: str, field: str, runs=runs) -> list[float]:
+            vals = [feature_value(f, key) for f in runs]
+            return [float(v[field]) for v in vals if isinstance(v, dict) and v.get(field) is not None]
+
+        out.append({"condition": cond, "runs": len(runs),
+                    "active_ms": _mean(col("rhythm.sim_active_ms")), "idle_ms": _mean(col("rhythm.sim_idle_ms")),
+                    "breaks": _mean(col("rhythm.break_count")), "avg_break_ms": _mean(col("rhythm.avg_break_ms")),
+                    "longest_break_ms": max(col("rhythm.longest_break_ms"), default=None),
+                    "text_per_interval": _mean(sub("rhythm.text_added_per_active_interval", "mean")),
+                    "rev_per_min_before": _mean(sub("rhythm.revisions_around_breaks", "per_active_minute_before")),
+                    "rev_per_min_after": _mean(sub("rhythm.revisions_around_breaks", "per_active_minute_after")),
+                    "runs_without_rhythm_data": sum(1 for f in runs if feature_value(f, "rhythm.sim_idle_ms") is None)})
+    return out
+
+
+def session_schedule(db: Database, sid: str):
+    """(segments, total_ms, markers) for the timeline widget, from stored events and real user actions."""
+    from ..engine.breaks import summarize
+    events = db.get_events(sid)
+    actions = db.get_user_actions(sid)
+    cancel = next((a for a in actions if a["action"] == "cancel"), None)
+    s = summarize([e for e in events if not (e.kind == "pause" and e.duration_ms is None)], end_ms=cancel["active_ms"] if cancel else None)
+    return s.segments, s.total_ms, [(a["active_ms"], a["action"]) for a in actions]

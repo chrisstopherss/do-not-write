@@ -30,6 +30,7 @@ from typing import Any
 from .. import ENGINE_VERSION
 from .builder import DocBuilder
 from .events import Event
+from .rhythm import RhythmConfig, RhythmHooks
 from .text import sentence_spans
 
 CATEGORY_ORDER = ("grammar", "misspelling", "substitution", "missing_duplicated", "punctuation", "repetition")
@@ -155,13 +156,21 @@ def _mutate_word(word: str, cat: str, rng: random.Random) -> str | None:
 
 def type_text(b: DocBuilder, text: str, rng: random.Random, cfg: SimConfig,
               stats: dict[str, CategoryStats] | None = None, base_ms_per_char: float = 180.0,
-              sentence_offset: int = 0) -> dict[str, CategoryStats]:
-    """Append ``text`` to the builder's document as a stream of word-sized insert events with simulated mistakes."""
+              sentence_offset: int = 0, rhythm: RhythmConfig | None = None) -> dict[str, CategoryStats]:
+    """Append ``text`` to the builder's document as a stream of word-sized insert events with simulated mistakes.
+
+    With ``rhythm=None`` the original pause behavior is used unchanged (same RNG sequence as engine sim-1.0.0).
+    With a RhythmConfig, pauses, breaks, revisions and speed shaping come from the rhythm hooks instead."""
     cfg.mistakes.validate()
+    if rhythm is not None:
+        rhythm.validate()
+        if rhythm.pace_ms_per_char:
+            base_ms_per_char = float(rhythm.pace_ms_per_char)
     st = stats if stats is not None else {c: CategoryStats() for c in ALL_CATEGORIES}
     spans = sentence_spans(text)
     units = [(m.start(), m.group()) for m in _UNIT_RE.finditer(text)]
     pending: list[dict[str, Any]] = []  # corrections waiting to happen: {pos, bad, good, due}
+    hooks = RhythmHooks(rhythm, len(spans), len(text), rng) if rhythm is not None else None
 
     def sentence_of(offset: int) -> int:
         for i, (_a, z) in enumerate(spans):
@@ -202,10 +211,15 @@ def type_text(b: DocBuilder, text: str, rng: random.Random, cfg: SimConfig,
     for ui, (off, unit) in enumerate(units):
         sidx = sentence_of(off)
         b.sentence = sentence_offset + sidx
+        took_break = False
         if sidx != last_sentence:
-            if last_sentence >= 0 and rng.random() < cfg.pause_rate:
-                flush(ui, force=True)
-                b.pause(rng.lognormvariate(8.5, 0.6))  # median ~5 s raw units
+            if hooks is None:
+                if last_sentence >= 0 and rng.random() < cfg.pause_rate:
+                    flush(ui, force=True)
+                    b.pause(rng.lognormvariate(8.5, 0.6))  # median ~5 s raw units
+            elif last_sentence >= 0:
+                flush(ui, force=True)  # finish pending corrections before revisions or a break
+                took_break = hooks.boundary(b, rng, sidx, sentence_offset)
             last_sentence = sidx
         # abandonment: at the first unit of a sentence
         if sidx not in abandon_done and off == spans[sidx][0]:
@@ -222,6 +236,8 @@ def type_text(b: DocBuilder, text: str, rng: random.Random, cfg: SimConfig,
                     b.advance(rng.uniform(400, 1200))
                     b.delete(start, len(chunk), {"category": "abandonment"})
                     st["abandonment"].applied += 1
+        if hooks is not None:
+            hooks.gap(b, rng, apply=not took_break)
         m = _WORD_CORE.match(unit.rstrip())
         trail = unit[len(unit.rstrip()):]
         lead, core, tail = m.groups() if m else ("", unit.rstrip(), "")
@@ -282,7 +298,8 @@ def type_text(b: DocBuilder, text: str, rng: random.Random, cfg: SimConfig,
                 modified = cat
                 st[cat].applied += 1
         bad_unit = lead + bad_core + tail + trail
-        b.advance(max(1, len(unit)) * base_ms_per_char * rng.lognormvariate(0, 0.35))
+        speed = hooks.cfg.weight(sidx, len(spans)) if hooks is not None else 1.0
+        b.advance(max(1, len(unit)) * base_ms_per_char * rng.lognormvariate(0, 0.35) / speed)
         pos = len(b.text)
         b.insert(pos, bad_unit, meta={"category": modified} if modified else None)
         if modified:

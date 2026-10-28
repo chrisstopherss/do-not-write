@@ -24,9 +24,11 @@ restrictive Content-Security-Policy; all text is HTML-escaped.
   "sessions": [ { "id", "label", "created_at", "data_origin", "status", "duration_ms", "seed", "engine_version",
                   "app_version", "config", "source_text", "final_text",
                   "events": [ {"seq","t_ms","kind","source","pos","removed","inserted","duration_ms","meta"} ],
+                  "user_actions": [ {"seq","active_ms","action","phase","source":"captured"} ],   // real app telemetry, when recorded
                   "features": { "<extractor>.<metric>": {"value","status","note","version"} } } ] }
 ```
-Keys are sorted; output is deterministic for identical data.
+`config.rhythm` holds the writing-rhythm parameters (if used). Pause events carry `duration_ms` and `meta.pause_class`
+(`short` or `break`). Keys are sorted; output is deterministic for identical data.
 
 ## Import `wpl.revision_history/1`
 Documented in the in-app guide ("Document history vs final text") and `src/wpl/lab/guide/document_history_research.md`;

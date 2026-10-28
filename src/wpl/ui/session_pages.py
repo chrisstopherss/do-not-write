@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
+    QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QProgressBar,
+    QScrollArea,
     QSpinBox,
     QTextBrowser,
     QVBoxLayout,
@@ -32,8 +34,21 @@ from PySide6.QtWidgets import (
 
 from ..analysis.diff import word_diff
 from ..analysis.features import AnalysisInput, run_extractors
+from ..engine.breaks import RhythmPlan, plan_rhythm
 from ..engine.events import Event, apply_event
-from ..engine.schedule import DEFAULT_GRACE_MS, MAX_DURATION_MS, PRESETS_MS, ScheduleError, validate_duration
+from ..engine.rhythm import (
+    PRESET_TITLES,
+    RhythmConfig,
+    RhythmError,
+)
+from ..engine.schedule import (
+    DEFAULT_GRACE_MS,
+    MAX_DURATION_MS,
+    PRESETS_MS,
+    InfeasibleSchedule,
+    ScheduleError,
+    validate_duration,
+)
 from ..engine.session import COMPLETED, PAUSED, RUNNING
 from ..engine.simulate import ALL_CATEGORIES, CHAR_LEVEL, CategoryConfig, MistakeConfig, SimConfig, simulate
 from ..engine.text import sentences, word_count
@@ -42,6 +57,8 @@ from ..io.textfiles import WARN_CHARS, InputError, read_text_file, validate_sour
 from ..service import SessionController
 from ..storage.db import Database, StorageError
 from . import theme
+from .charts import RhythmTimeline
+from .rhythm_panel import RhythmPanel
 from .widgets import button, fill, fmt_ms, label, table
 
 CATEGORY_INFO = {
@@ -71,13 +88,23 @@ def diff_html(a: str, b: str) -> str:
 
 
 class NewSessionPage(QWidget):
-    start_requested = Signal(str, int, int, object, str)  # text, duration_ms, seed, SimConfig, label
+    start_requested = Signal(str, int, int, object, str, object)  # text, duration_ms, seed, SimConfig, label, RhythmConfig
 
     def __init__(self, db: Database) -> None:
         super().__init__()
         self.setObjectName("page")
         self.db = db
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setAccessibleName("New session form")
+        inner = QWidget()
+        inner.setObjectName("page")
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
+        root = QVBoxLayout(inner)
         root.setContentsMargins(28, 20, 28, 20)
         head = QHBoxLayout()
         head.addWidget(label("New session", "h1"))
@@ -94,6 +121,7 @@ class NewSessionPage(QWidget):
         self.editor.setAccessibleName("Source text")
         self.editor.setPlaceholderText("Paste or import some text to begin.\nNothing leaves this computer. Your original text is never modified.")
         self.editor.textChanged.connect(self._update_estimate)
+        self.editor.setMinimumHeight(170)
         root.addWidget(self.editor, 1)
         row = QHBoxLayout()
         self.paste_btn = button("Paste from clipboard")
@@ -136,6 +164,11 @@ class NewSessionPage(QWidget):
         self.hours.valueChanged.connect(self._custom_changed)
         self.minutes.valueChanged.connect(self._custom_changed)
         root.addLayout(dur)
+
+        self.rhythm = RhythmPanel()
+        self.rhythm.changed.connect(self._update_estimate)
+        self.rhythm.preview_requested.connect(self._preview_schedule)
+        root.addWidget(self.rhythm)
 
         box = QGroupBox("Mistake and revision settings (experimental transformations)")
         g = QGridLayout(box)
@@ -208,7 +241,9 @@ class NewSessionPage(QWidget):
         m.validate()
         return SimConfig(m)
 
-    def load_config(self, cfg: SimConfig, seed: int, duration_ms: int) -> None:
+    def load_config(self, cfg: SimConfig, seed: int, duration_ms: int, rhythm: RhythmConfig | None = None) -> None:
+        if rhythm is not None:
+            self.rhythm.set_config(rhythm)
         for cat, c in cfg.mistakes.categories.items():
             self.cat_checks[cat].setChecked(c.enabled)
             self.cat_rates[cat].setValue(c.rate * 100)
@@ -291,14 +326,85 @@ class NewSessionPage(QWidget):
         lay.addWidget(bb)
         dlg.exec()
 
+    def _plan(self, text: str, ms: int, cfg: SimConfig, rhythm: RhythmConfig) -> RhythmPlan:
+        return plan_rhythm(text, self.seed.value(), cfg, rhythm, ms)
+
+    def _offer_alternative(self, exc: InfeasibleSchedule) -> None:
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle("Schedule does not fit the selected duration")
+        box.setText(exc.explain())
+        use = None
+        if exc.needed_duration_ms <= MAX_DURATION_MS:
+            use = box.addButton(f"Use {fmt_ms(exc.needed_duration_ms)} as the duration", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Edit rhythm settings", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if use is not None and box.clickedButton() is use:
+            ms = exc.needed_duration_ms
+            self.chips["Custom"].setChecked(True)
+            self.hours.setValue(ms // 3_600_000)
+            self.minutes.setValue((ms // 60_000) % 60)
+
+    def _preview_schedule(self) -> None:
+        v = self._validated()
+        if not v:
+            return
+        text, ms, cfg = v
+        try:
+            rhythm = self.rhythm.config()
+        except RhythmError as exc:
+            self._show_error(str(exc))
+            return
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Preview of the proposed activity and break schedule")
+        dlg.resize(860, 560)
+        lay = QVBoxLayout(dlg)
+        try:
+            plan = self._plan(text, ms, cfg, rhythm)
+        except InfeasibleSchedule as exc:
+            lay.addWidget(label(exc.explain(), "banner_warn"))
+            bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+            bb.rejected.connect(dlg.reject)
+            lay.addWidget(bb)
+            dlg.exec()
+            return
+        s = plan.summary
+        lay.addWidget(label(f"Mode: {PRESET_TITLES.get(rhythm.name, rhythm.name)}. Seed {self.seed.value()}. Times are on the simulated session clock. "
+                            "Break lengths are experimental parameters, not evidence of human behavior.", "muted"))
+        tl = RhythmTimeline()
+        tl.set_schedule(s.segments, ms)
+        lay.addWidget(tl)
+        t = table(["Quantity", "Value"])
+        writing = [g for g in s.segments if g.kind == "writing"]
+        fill(t, [["Planned session length", fmt_ms(s.total_ms) + f" of {fmt_ms(ms)} selected"], ["Active writing time (simulated)", fmt_ms(s.active_ms)],
+                 ["Idle time (short pauses + breaks, simulated)", fmt_ms(s.idle_ms)], ["Breaks", str(s.breaks)], ["Short pauses", str(s.short_pauses)],
+                 ["Average break", fmt_ms(s.avg_break_ms) if s.avg_break_ms is not None else "no breaks"],
+                 ["Longest break", fmt_ms(s.longest_break_ms) if s.longest_break_ms is not None else "no breaks"],
+                 ["Writing intervals", str(len(writing))], ["Completion", plan.deadline.completion.replace("_", " ")]])
+        lay.addWidget(t, 1)
+        bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        bb.rejected.connect(dlg.reject)
+        lay.addWidget(bb)
+        dlg.exec()
+
     def _start(self) -> None:
         v = self._validated()
         if not v:
             return
         text, ms, cfg = v
+        try:
+            rhythm = self.rhythm.config()
+        except RhythmError as exc:
+            self._show_error(str(exc))
+            return
         if self.auto_seed.isChecked():
             self.seed.setValue(random.randrange(1, 2**31 - 1))
-        self.start_requested.emit(text, ms, self.seed.value(), cfg, "")
+        try:
+            self._plan(text, ms, cfg, rhythm)  # fail early, with alternatives, if the break schedule cannot fit
+        except InfeasibleSchedule as exc:
+            self._offer_alternative(exc)
+            return
+        self.start_requested.emit(text, ms, self.seed.value(), cfg, "", rhythm)
 
 
 class OutputView(QPlainTextEdit):
@@ -384,6 +490,12 @@ class ActiveSessionPage(QWidget):
         times.addStretch(1)
         times.addWidget(self.remaining)
         root.addLayout(times)
+        self.split_lb = label("", "muted", wrap=False)
+        root.addWidget(self.split_lb)
+        self.timeline = RhythmTimeline("Schedule: writing intervals and breaks (simulated clock)")
+        self.timeline.setMinimumHeight(138)
+        self.timeline.setMaximumHeight(160)
+        root.addWidget(self.timeline)
         ctl = QHBoxLayout()
         self.pause_btn = button("Pause")
         self.resume_btn = button("Resume", "primary")
@@ -419,7 +531,12 @@ class ActiveSessionPage(QWidget):
         s = self.db.get_session(ctl.sid)
         self.info.setText(f"Seed {s['seed']}  |  engine {s['engine_version']}")
         self.banner.hide()
+        from ..engine.breaks import summarize
+        self.timeline.set_schedule(summarize(ctl.session.events).segments, ctl.session.duration_ms, self._markers())
         self._sync()
+
+    def _markers(self) -> list[tuple[int, str]]:
+        return [(a["active_ms"], a["action"]) for a in self.db.get_user_actions(self.ctl.sid)] if self.ctl else []
 
     def _sync(self) -> None:
         st = self.ctl.state if self.ctl else "idle"
@@ -443,13 +560,17 @@ class ActiveSessionPage(QWidget):
         if not self.ctl or not self.ctl.session:
             return
         s = self.ctl.session
-        self.state_lb.setText(s.state.upper())
+        phase, detail = s.phase_detail()
+        self.state_lb.setText(phase if not detail else f"{phase} ({detail})")
+        self.split_lb.setText(f"Active writing {fmt_ms(s.writing_ms())}   |   Idle (simulated pauses and breaks) {fmt_ms(s.idle_ms())}")
+        self.timeline.set_now(s.active_ms())
         self.elapsed.setText(f"Elapsed {fmt_ms(s.active_ms())}")
         self.remaining.setText(f"Remaining {fmt_ms(s.remaining_ms())}")
         self.bar.setValue(int(s.progress() * 1000))
         nd = s.next_due_in_ms()
         self.waiting.setText("Paused, clock stopped" if s.state == PAUSED else
-                             f"Waiting: next event in ~{max(0, round(nd / 1000))} s" if nd is not None and nd > 1500 else "")
+                             f"{'Break' if phase == 'Break' else 'Waiting'}: next writing event in ~{max(0, round(nd / 1000))} s"
+                             if nd is not None and nd > 1500 else "")
 
     def _on_due(self) -> None:
         if not self.ctl or not self.ctl.session or self.ctl.state != RUNNING:
@@ -467,11 +588,13 @@ class ActiveSessionPage(QWidget):
             self._tick.stop()
             self._sync()
             d = self.ctl.deadline
-            msg = "Session complete."
+            msg = "Session complete (completed normally)."
             if d and d.deadline_priority:
-                msg += " The deadline took priority: output stopped at the nearest sentence boundary before the grace limit."
+                msg = "Stopped by the deadline: output ended at the nearest sentence boundary before the grace limit, so part of the text was not written."
+            elif d and d.completion == "deadline_stop":
+                msg = f"Stopped by the deadline after finishing the current sentence (grace used: {fmt_ms(d.grace_used_ms)}); the rest of the text was not written."
             elif d and d.grace_used_ms:
-                msg += f" The deadline fell mid-sentence; finished within the grace limit ({fmt_ms(d.grace_used_ms)} used)."
+                msg = f"Session complete. The deadline fell mid-sentence; finished within the grace limit ({fmt_ms(d.grace_used_ms)} used)."
             self.banner.setText(msg)
             self.banner.show()
             self.finished.emit(self.ctl.sid)
@@ -502,11 +625,13 @@ class ActiveSessionPage(QWidget):
         if self.ctl:
             self._due.stop()
             self.ctl.pause()
+            self.timeline.markers = self._markers()
             self._sync()
 
     def _resume(self) -> None:
         if self.ctl:
             self.ctl.resume()
+            self.timeline.markers = self._markers()
             self._tick.start()
             self._sync()
             self._on_due()
@@ -515,20 +640,26 @@ class ActiveSessionPage(QWidget):
         if not self.ctl:
             return
         was_running = self.ctl.state == RUNNING
-        if was_running:
-            self._pause()
+        if was_running:  # hold the clock while the confirmation is open; this is UI mechanics, not a logged user pause
+            self._due.stop()
+            self.ctl.pause(record=False)
+            self._sync()
         r = QMessageBox.question(self, "Cancel session", "Cancel this session? The text produced so far is kept in History, "
                                  "but the session cannot be resumed.")
         if r == QMessageBox.StandardButton.Yes:
             self._due.stop()
             self._tick.stop()
             self.ctl.cancel()
+            self.timeline.markers = self._markers()
             self.banner.setText("Session cancelled. Partial output was saved to History.")
             self.banner.show()
             self._sync()
             self.finished.emit(self.ctl.sid)
         elif was_running:
-            self._resume()
+            self.ctl.resume(record=False)
+            self._tick.start()
+            self._sync()
+            self._on_due()
 
 
 class HistoryPage(QWidget):
@@ -608,7 +739,11 @@ class HistoryPage(QWidget):
         self.btns["compare"].setEnabled(len(sids) == 2)
         if row:
             c = theme.colors()
-            self.detail.setHtml(f'<p style="color:{c["muted"]}">Data origin: <b>{row["data_origin"].upper()}</b>. Original vs final text '
+            comp = ""
+            if row["deadline_json"]:
+                dl = json.loads(row["deadline_json"])
+                comp = f" Completion: <b>{dl.get('completion', 'normal').replace('_', ' ')}</b>."
+            self.detail.setHtml(f'<p style="color:{c["muted"]}">Data origin: <b>{row["data_origin"].upper()}</b>.{comp} Original vs final text '
                                 f'(green = added, red = removed).</p>' + diff_html(row["source_text"], row["final_text"] or ""))
 
     def _row(self):
@@ -622,7 +757,7 @@ class HistoryPage(QWidget):
         if kind == "txt":
             content, ext = row["final_text"] or "", "txt"
         elif kind == "json":
-            content, ext = X.dataset_json(row["label"] or row["id"], [X.session_dict(row, events, self.db.latest_features(row["id"]))]), "json"
+            content, ext = X.dataset_json(row["label"] or row["id"], [X.session_dict(row, events, self.db.latest_features(row["id"]), self.db.get_user_actions(row["id"]))]), "json"
         elif kind == "csv":
             content, ext = X.events_csv(row["id"], row["data_origin"], events), "csv"
         else:

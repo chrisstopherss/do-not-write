@@ -10,8 +10,12 @@ src/wpl/
     builder.py   DocBuilder used by generators
     simulate.py  seeded mistake engine (8 categories, defined denominators, one modification per word)
     schedule.py  duration limits, fit-to-duration, checkpoints, deadline + bounded grace rule
-    session.py   playback state machine on an injectable monotonic clock (pause/resume/cancel/restore)
-  analysis/    features.py (versioned extractors, missing != zero), diff.py, revisions.py,
+    session.py   playback state machine on an injectable monotonic clock (pause/resume/cancel/restore);
+                 phases Writing / Break / Paused / Completed, simulated idle-time accounting
+    rhythm.py    RhythmConfig (validation limits), presets Regular / Reflective / Extended Breaks / Custom, draw logic
+    breaks.py    break scheduler: plan_rhythm() and schedule summaries (active vs idle, segments)
+    revise.py    seeded revision operations shared by condition D and rhythm profiles
+  analysis/    features.py (versioned extractors, missing != zero), rhythm.py (break/idle analytics), diff.py, revisions.py,
                finaltext.py (descriptive statistics only), evaluation.py (confusion matrix, Wilson CI, split)
   lab/         conditions.py (A-E generators), runner.py (experiments), methods.py (evaluated rule),
                templates.py, overview.py (dashboard data shaping), guide/*.md (research docs)
@@ -38,8 +42,18 @@ src/wpl/
   a grace period (default 5 min, hard cap 10 min). Otherwise output stops at the previous sentence boundary and the
   result is flagged `deadline_priority`.
 * **Missing data.** Extractors return `missing` or `insufficient_data` (value null) rather than 0.
-* **Migrations.** Numbered SQL files applied in a transaction; `002` adds columns with defaults, so v1 databases upgrade
-  without data loss (tested).
+* **Break scheduler.** `plan_rhythm` generates the writing stream with absolute-length pauses and breaks from the
+  session seed, then `fit_active` rescales only active writing time so the whole plan (writing + breaks) fits the selected
+  duration. If breaks plus a minimum writing time (30 ms/char, a feasibility floor) exceed the duration it raises
+  `InfeasibleSchedule`, whose message offers a longer duration or less total break time. With a fixed pace the plan is not
+  fitted and `apply_deadline` decides the outcome, recorded as `normal`, `grace` or `deadline_stop` in `sessions.deadline_json`.
+  Breaks are capped at 5 minutes and cannot extend a session: nothing is ever scheduled past duration + grace.
+* **Real vs simulated.** Pauses and breaks are simulated events. The user's own Pause/Resume/Cancel are real application
+  telemetry stored in `user_actions` (migration 003), never in `events`, so replay and crash recovery are unaffected.
+  Pauses the UI makes itself (holding the clock while a confirmation is open) are not logged.
+* **Migrations.** Numbered SQL files applied in a transaction; `002` adds columns with defaults, and `003` adds the `user_actions` table, so older databases upgrade
+  without data loss (tested). Sessions made before the rhythm feature keep recovering: the legacy planner is unchanged and its
+  output is pinned by golden hashes in the tests.
 
 ## Mistake categories and denominators
 See the module docstring in `engine/simulate.py`; the UI shows the denominator next to each rate. Percentages are

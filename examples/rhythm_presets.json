@@ -1,0 +1,53 @@
+{
+  "schema": "wpl.rhythm_presets/1",
+  "presets": {
+    "regular": {
+      "name": "regular",
+      "pause_min_ms": 500,
+      "pause_max_ms": 3000,
+      "short_pause_prob": 0.1,
+      "long_break_prob": 0.05,
+      "break_min_ms": 10000,
+      "break_max_ms": 60000,
+      "revision_per_1000": 3.0,
+      "activity": "uniform",
+      "pace_ms_per_char": null
+    },
+    "reflective": {
+      "name": "reflective",
+      "pause_min_ms": 1000,
+      "pause_max_ms": 8000,
+      "short_pause_prob": 0.25,
+      "long_break_prob": 0.2,
+      "break_min_ms": 20000,
+      "break_max_ms": 300000,
+      "revision_per_1000": 6.0,
+      "activity": "uniform",
+      "pace_ms_per_char": null
+    },
+    "extended": {
+      "name": "extended",
+      "pause_min_ms": 1000,
+      "pause_max_ms": 5000,
+      "short_pause_prob": 0.1,
+      "long_break_prob": 0.4,
+      "break_min_ms": 60000,
+      "break_max_ms": 300000,
+      "revision_per_1000": 2.0,
+      "activity": "bursty",
+      "pace_ms_per_char": null
+    },
+    "custom": {
+      "name": "custom",
+      "pause_min_ms": 500,
+      "pause_max_ms": 3000,
+      "short_pause_prob": 0.1,
+      "long_break_prob": 0.05,
+      "break_min_ms": 10000,
+      "break_max_ms": 60000,
+      "revision_per_1000": 3.0,
+      "activity": "uniform",
+      "pace_ms_per_char": null
+    }
+  }
+}

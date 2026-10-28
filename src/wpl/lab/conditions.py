@@ -14,16 +14,20 @@ from typing import Any
 
 from ..engine.builder import DocBuilder
 from ..engine.events import Event
+from ..engine.revise import SYNTH_SENTENCES  # noqa: F401
+from ..engine.revise import revise as _revise
+from ..engine.rhythm import RhythmConfig
 from ..engine.schedule import (
     DEFAULT_GRACE_MS,
     DeadlineOutcome,
     add_checkpoints,
     apply_deadline,
+    fit_active,
     fit_to_duration,
     validate_duration,
 )
 from ..engine.simulate import ALL_CATEGORIES, CategoryStats, MistakeConfig, SimConfig, type_text
-from ..engine.text import WORD_RE, sentence_spans
+from ..engine.text import sentence_spans
 
 CONDITION_NAMES = {
     "A": "Incremental composition",
@@ -32,9 +36,6 @@ CONDITION_NAMES = {
     "D": "Revision-heavy editing",
     "E": "Mixed workflow",
 }
-SYNTH_SENTENCES = ["The matter was noted for the record.", "A follow-up review was scheduled.",
-                   "Several attendees asked for further detail.", "No objections were raised at that point.",
-                   "The summary was circulated afterwards."]
 BULK_THRESHOLD_DEFAULT = 200
 
 
@@ -63,6 +64,7 @@ class ConditionParams:
     insert_chunks: int = 1                # C: number of pieces the text is inserted in
     bulk_threshold_chars: int = BULK_THRESHOLD_DEFAULT
     grace_ms: int = DEFAULT_GRACE_MS
+    rhythm: dict[str, Any] | None = None  # RhythmConfig as a dict; applies to conditions A and E (incremental entry)
 
     def validate(self) -> None:
         if self.code not in CONDITION_NAMES:
@@ -77,6 +79,8 @@ class ConditionParams:
         if not 1 <= self.insert_chunks <= 1000:
             raise ParamError("insert_chunks must be within [1, 1000]")
         MistakeConfig.from_dict(self.mistakes)
+        if self.rhythm is not None:
+            RhythmConfig.from_dict(self.rhythm)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -94,31 +98,6 @@ class RunOutput:
     stats: dict[str, CategoryStats]
     ground_truth: dict[str, Any]
     deadline: DeadlineOutcome
-
-
-def _revise(b: DocBuilder, rng: random.Random, n: int) -> None:
-    for _ in range(n):
-        b.advance(rng.uniform(2000, 20000))
-        spans = sentence_spans(b.text)
-        b.sentence = max(0, len(spans) - 1)
-        kind = rng.choice(["replace", "replace", "delete", "add"])
-        meta = {"category": "revision", "revision_kind": kind}
-        words = list(WORD_RE.finditer(b.text))
-        if kind == "replace" and len(words) > 3:
-            m = words[rng.randrange(len(words))]
-            pool = sorted({w.group().lower() for w in words if len(w.group()) >= 3 and w.group().lower() != m.group().lower()})
-            if pool:
-                new = rng.choice(pool)
-                b.replace(m.start(), m.end() - m.start(), new.capitalize() if m.group()[0].isupper() else new, meta)
-                continue
-            kind = "add"
-        if kind == "delete" and len(spans) > 2:
-            a, z = spans[rng.randrange(len(spans))]
-            end = z + 1 if z < len(b.text) and b.text[z] == " " else z
-            b.delete(a, end - a, meta)
-            continue
-        a, z = spans[rng.randrange(len(spans))] if spans else (0, 0)
-        b.insert(z, " " + rng.choice(SYNTH_SENTENCES), meta=meta)
 
 
 def _split_points(text: str) -> tuple[int, int]:
@@ -148,8 +127,9 @@ def generate(params: ConditionParams, seed: int) -> RunOutput:
             b.advance(rng.uniform(4000, 12000))
             b.insert(len(b.text), chunk, meta={"method": "sentence_reproduction"})
 
+    rcfg = RhythmConfig.from_dict(params.rhythm) if params.rhythm is not None and code in ("A", "E") else None
     if code == "A":
-        type_text(b, text, rng, cfg, stats)
+        type_text(b, text, rng, cfg, stats, rhythm=rcfg)
     elif code == "B":
         insert_by_sentence(text, 0)
     elif code == "C":
@@ -167,14 +147,19 @@ def generate(params: ConditionParams, seed: int) -> RunOutput:
         _revise(b, rng, n_rev)
     elif code == "E":
         p1, p2 = _split_points(text)
-        type_text(b, text[:p1], rng, cfg, stats)
+        type_text(b, text[:p1], rng, cfg, stats, rhythm=rcfg)
         n1 = len(sentence_spans(text[:p1]))
         b.advance(rng.uniform(3000, 9000))
         b.sentence = n1
         b.insert(len(b.text), text[p1:p2], meta={"method": "engine_insert"})
         insert_by_sentence(text[p2:], n1 + 1)
         _revise(b, rng, n_rev)
-    events = fit_to_duration(b.events, params.duration_ms) if needs_fit else b.events
+    if not needs_fit:
+        events = b.events
+    elif rcfg is not None:
+        events = b.events if rcfg.pace_ms_per_char else fit_active(b.events, params.duration_ms, len(text))
+    else:
+        events = fit_to_duration(b.events, params.duration_ms)
     events, outcome = apply_deadline(events, params.duration_ms, params.grace_ms)
     events = add_checkpoints(events, params.checkpoint_interval_ms)
     largest = max((len(e.inserted) for e in events if e.kind in ("insert", "paste", "import")), default=0)

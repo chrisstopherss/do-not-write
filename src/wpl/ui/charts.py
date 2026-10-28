@@ -246,3 +246,73 @@ class ConfusionWidget(ChartBase):
             f.setPointSizeF(f.pointSizeF() - 6)
             p.setFont(f)
             p.drawText(rect.adjusted(4, 2, 0, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, key.upper())
+
+
+class RhythmTimeline(ChartBase):
+    """Writing intervals, short pauses and breaks on the simulated session clock. Segments are SIMULATED (engine);
+    markers are real application telemetry (user pause/resume/cancel). The legend says which is which."""
+
+    def __init__(self, title: str = "Writing and break schedule") -> None:
+        super().__init__(title, "No schedule to show yet.")
+        self.setMinimumHeight(138)
+        self.segs: list[tuple[int, int, str]] = []
+        self.total = 0
+        self.markers: list[tuple[int, str]] = []
+        self.now: float | None = None
+
+    def set_schedule(self, segments: list, total_ms: int | None = None, markers: list[tuple[int, str]] | None = None) -> None:
+        self.segs = [(s.start_ms, s.end_ms, s.kind) for s in segments]
+        self.total = max(total_ms or 0, max((e for _, e, _ in self.segs), default=0))
+        self.markers = list(markers or [])
+        brk = [s for s in self.segs if s[2] == "break"]
+        idle = sum(e - s for s, e, k in self.segs if k != "writing")
+        self.set_summary(f"{self.title}: {len(self.segs)} segments over {self.total / 1000:.0f} s, {len(brk)} breaks, {idle / 1000:.0f} s idle. "
+                         "All segments are simulated; markers are real user actions.")
+        self.update()
+
+    def set_now(self, ms: float | None) -> None:
+        self.now = ms
+        self.update()
+
+    def paintEvent(self, _e: object) -> None:
+        p = QPainter(self)
+        c = theme.colors()
+        cols = theme.series()
+        r = self._begin(p)
+        r = QRectF(r.left() - 36, r.top(), r.width() + 36, max(28.0, r.height() - 18))
+        if not self.segs or self.total <= 0:
+            self._paint_empty(p)
+            return
+        colors = {"writing": QColor(cols[0]), "short_pause": QColor(cols[3]), "break": QColor(cols[1])}
+        bar = QRectF(r.left(), r.top() + 22, r.width(), 28)
+        p.fillRect(bar, QColor(c["line"]))
+        for s, e, k in self.segs:
+            x0 = bar.left() + s / self.total * bar.width()
+            w = max(1.0, (e - s) / self.total * bar.width())
+            p.fillRect(QRectF(x0, bar.top(), w, bar.height()), colors.get(k, QColor(cols[0])))
+        p.setPen(QColor(c["muted"]))
+        p.drawText(QRectF(bar.left(), bar.bottom() + 2, 80, 14), Qt.AlignmentFlag.AlignLeft, "0:00")
+        end = int(self.total / 1000)
+        p.drawText(QRectF(bar.right() - 90, bar.bottom() + 2, 90, 14), Qt.AlignmentFlag.AlignRight, f"{end // 60}:{end % 60:02d}")
+        p.setPen(QPen(QColor(c["text"]), 2))
+        for ms, _label in self.markers:  # real application telemetry: diamonds above the bar
+            x = bar.left() + min(ms, self.total) / self.total * bar.width()
+            p.drawLine(QPointF(x, bar.top() - 6), QPointF(x, bar.bottom()))
+            p.drawEllipse(QPointF(x, bar.top() - 8), 3, 3)
+        if self.now is not None:
+            x = bar.left() + min(self.now, self.total) / self.total * bar.width()
+            p.setPen(QPen(QColor(c["accent"]), 2))
+            p.drawLine(QPointF(x, bar.top() - 4), QPointF(x, bar.bottom() + 4))
+        # legend: simulated vs real
+        x = r.left()
+        y = int(bar.bottom()) + 20
+        for text, col in (("Writing (simulated)", colors["writing"]), ("Short pause (simulated)", colors["short_pause"]), ("Break (simulated)", colors["break"])):
+            p.fillRect(QRectF(x, y + 2, 10, 10), col)
+            p.setPen(QColor(c["text"]))
+            w = p.fontMetrics().horizontalAdvance(text) + 22
+            p.drawText(QRectF(x + 14, y, w, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, text)
+            x += w + 8
+        p.setPen(QPen(QColor(c["text"]), 2))
+        p.drawEllipse(QPointF(x + 4, y + 7), 3, 3)
+        p.setPen(QColor(c["text"]))
+        p.drawText(QRectF(x + 12, y, 260, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "Real user action (pause/resume/cancel)")

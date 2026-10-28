@@ -41,6 +41,10 @@ class SessionStateError(RuntimeError):
     pass
 
 
+# User-visible phases. "Writing" includes short simulated pauses (see phase_detail); "Paused" is a manual pause.
+WRITING, BREAK, USER_PAUSED, DONE = "Writing", "Break", "Paused", "Completed"
+
+
 @dataclass
 class Snapshot:
     cursor: int
@@ -58,6 +62,9 @@ class Session:
         self.cursor = 0
         self._active_before = 0.0
         self._run_started: float | None = None
+        # simulated pauses/breaks as (start_ms, end_ms, is_break), from the plan's pause events
+        self._idle = sorted((e.t_ms, e.t_ms + e.duration_ms, e.meta.get("pause_class") == "break") for e in events
+                            if e.kind == "pause" and e.t_ms is not None and e.duration_ms)
 
     # -- clock
     def active_ms(self) -> float:
@@ -70,6 +77,43 @@ class Session:
 
     def progress(self) -> float:
         return 0.0 if not self.events else self.cursor / len(self.events)
+
+    def idle_ms(self) -> float:
+        """Simulated idle time (short pauses + breaks) elapsed so far on the session clock."""
+        now = self.active_ms()
+        return float(sum(max(0.0, min(end, now) - start) for start, end, _ in self._idle if start < now))
+
+    def writing_ms(self) -> float:
+        return max(0.0, self.active_ms() - self.idle_ms())
+
+    def phase_detail(self) -> tuple[str, str]:
+        """(phase, detail). Phase is one of Writing, Break, Paused, Completed (or Ready/Cancelled outside a run)."""
+        if self.state == COMPLETED:
+            return DONE, ""
+        if self.state == CANCELLED:
+            return "Cancelled", ""
+        if self.state == IDLE:
+            return "Ready", ""
+        if self.state == PAUSED:
+            return USER_PAUSED, "paused manually; the session clock is stopped"
+        now = self.active_ms()
+        for start, end, is_break in self._idle:
+            if start <= now < end:
+                return (BREAK, f"simulated break, {(end - now) / 1000:.0f} s left") if is_break else (WRITING, "short simulated pause")
+        return WRITING, ""
+
+    def phase(self) -> str:
+        return self.phase_detail()[0]
+
+    def clock_phase(self) -> str:
+        """What the simulated session is doing at the current session-clock time (Writing or Break), regardless of
+        whether the user has paused it. Used to label real user actions with the phase they interrupted."""
+        if self.state in (RUNNING, PAUSED):
+            now = self.active_ms()
+            if any(start <= now < end and is_break for start, end, is_break in self._idle):
+                return BREAK
+            return WRITING
+        return self.phase()
 
     # -- transitions
     def start(self) -> None:

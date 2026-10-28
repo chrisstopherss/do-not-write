@@ -6,8 +6,10 @@ import logging
 from dataclasses import asdict
 from typing import Any
 
-from . import ENGINE_VERSION
+from . import ENGINE_VERSION, LEGACY_COMPATIBLE_ENGINES
+from .engine.breaks import plan_rhythm
 from .engine.events import Event, apply_event
+from .engine.rhythm import RhythmConfig
 from .engine.schedule import (
     DEFAULT_GRACE_MS,
     DeadlineOutcome,
@@ -23,11 +25,20 @@ from .storage.db import Database, StorageError
 log = logging.getLogger("wpl.service")
 
 
+def deadline_json(d: DeadlineOutcome | None) -> str | None:
+    return json.dumps({**asdict(d), "completion": d.completion}) if d else None
+
+
 def build_plan(text: str, seed: int, sim: SimConfig, duration_ms: int, grace_ms: int = DEFAULT_GRACE_MS,
-               checkpoint_ms: int | None = None) -> tuple[list[Event], DeadlineOutcome]:
+               checkpoint_ms: int | None = None, rhythm: RhythmConfig | None = None) -> tuple[list[Event], DeadlineOutcome]:
+    """Plan a session. With ``rhythm`` the break scheduler is used (may raise InfeasibleSchedule); without it the
+    original planner runs unchanged. Both finish inside ``duration_ms`` subject to the deadline/grace rule."""
     validate_duration(duration_ms)
     if not text.strip():
         raise ValueError("input text is empty")
+    if rhythm is not None:
+        plan = plan_rhythm(text, seed, sim, rhythm, duration_ms, grace_ms, checkpoint_ms)
+        return plan.events, plan.deadline
     res = simulate(text, seed, sim)
     events = fit_to_duration(res.events, duration_ms)
     events, outcome = apply_deadline(events, duration_ms, grace_ms)
@@ -49,9 +60,11 @@ class SessionController:
         return self.session.state if self.session else IDLE
 
     def create(self, text: str, duration_ms: int, seed: int, sim: SimConfig, grace_ms: int = DEFAULT_GRACE_MS,
-               checkpoint_ms: int | None = None, label: str = "") -> str:
-        events, self.deadline = build_plan(text, seed, sim, duration_ms, grace_ms, checkpoint_ms)
-        cfg = {"sim": sim.to_dict(), "grace_ms": grace_ms, "checkpoint_ms": checkpoint_ms}
+               checkpoint_ms: int | None = None, label: str = "", rhythm: RhythmConfig | None = None) -> str:
+        events, self.deadline = build_plan(text, seed, sim, duration_ms, grace_ms, checkpoint_ms, rhythm)
+        cfg: dict[str, Any] = {"sim": sim.to_dict(), "grace_ms": grace_ms, "checkpoint_ms": checkpoint_ms}
+        if rhythm is not None:
+            cfg["rhythm"] = rhythm.to_dict()
         self.sid = self.db.create_session(source_text=text, seed=seed, duration_ms=duration_ms, config=cfg, label=label,
                                           status="idle", origin="simulated")
         self.session = Session(events, duration_ms, self.clock)
@@ -71,20 +84,31 @@ class SessionController:
         self._save()
         log.info("session %s started", self.sid)
 
-    def pause(self) -> None:
+    def _action(self, action: str) -> None:
+        """Record a real user action (application telemetry) with the phase it happened in."""
         assert self.session
+        self.db.add_user_action(self.sid, int(self.session.active_ms()), action, self.session.clock_phase())
+
+    def pause(self, record: bool = True) -> None:
+        """Pause the session clock. ``record=False`` is for pauses the UI makes itself (e.g. while a confirmation is open)."""
+        assert self.session
+        if record:
+            self._action("pause")
         self.session.pause()
         self._save()
         log.info("session %s paused", self.sid)
 
-    def resume(self) -> None:
+    def resume(self, record: bool = True) -> None:
         assert self.session
         self.session.resume()
+        if record:
+            self._action("resume")
         self._save()
         log.info("session %s resumed", self.sid)
 
     def cancel(self) -> None:
         assert self.session
+        self._action("cancel")  # recorded first so the phase (e.g. Break) is the one the user cancelled in
         self.session.cancel()
         self._save(final_text=self.text)
         log.info("session %s cancelled", self.sid)
@@ -97,7 +121,7 @@ class SessionController:
                 self.text = apply_event(self.text, e)
             self.db.add_events(self.sid, due)
         if self.session.state == COMPLETED:
-            self._save(final_text=self.text, deadline_json=json.dumps(asdict(self.deadline)) if self.deadline else None)
+            self._save(final_text=self.text, deadline_json=deadline_json(self.deadline))
             log.info("session %s completed", self.sid)
         elif due:
             self._save()
@@ -109,12 +133,14 @@ class SessionController:
         row = db.get_session(sid)
         if row is None:
             raise StorageError("no such session")
-        if row["engine_version"] != ENGINE_VERSION:
-            raise StorageError(f"session was created with engine {row['engine_version']}; cannot replay deterministically with {ENGINE_VERSION}")
         cfg = json.loads(row["config_json"])
+        legacy_ok = row["engine_version"] in LEGACY_COMPATIBLE_ENGINES and "rhythm" not in cfg
+        if row["engine_version"] != ENGINE_VERSION and not legacy_ok:
+            raise StorageError(f"session was created with engine {row['engine_version']}; cannot replay deterministically with {ENGINE_VERSION}")
         c = cls(db, clock)
+        rhythm = RhythmConfig.from_dict(cfg["rhythm"]) if "rhythm" in cfg else None
         events, c.deadline = build_plan(row["source_text"], row["seed"], SimConfig.from_dict(cfg["sim"]), row["duration_ms"],
-                                        cfg.get("grace_ms", DEFAULT_GRACE_MS), cfg.get("checkpoint_ms"))
+                                        cfg.get("grace_ms", DEFAULT_GRACE_MS), cfg.get("checkpoint_ms"), rhythm)
         stored = db.get_events(sid)
         if [(e.kind, e.t_ms, e.pos, e.removed, e.inserted) for e in stored] != \
            [(e.kind, e.t_ms, e.pos, e.removed, e.inserted) for e in events[:len(stored)]]:
@@ -141,7 +167,8 @@ def analyze_session(db: Database, sid: str) -> dict[str, dict[str, Any]]:
     if row is None:
         raise StorageError("no such session")
     events = db.get_events(sid)
-    res = run_extractors(AnalysisInput("", row["final_text"] or "", events, row["duration_ms"], row["data_origin"], row["source_text"]))
+    res = run_extractors(AnalysisInput("", row["final_text"] or "", events, row["duration_ms"], row["data_origin"], row["source_text"],
+                                       db.get_user_actions(sid), "rhythm" in json.loads(row["config_json"])))
     # replay starts from an empty document; source_text is the reference input that was reproduced
     aid = db.new_analysis_run({k: v.version for k, v in REGISTRY.items()})
     db.save_features(aid, sid, res)

@@ -146,6 +146,16 @@ class Database:
     def get_checkpoint_snapshots(self, sid: str) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM checkpoints WHERE session_id=? ORDER BY idx", (sid,)).fetchall()
 
+    # -- user actions (real application telemetry)
+    def add_user_action(self, sid: str, active_ms: int, action: str, phase: str) -> None:
+        n = self.conn.execute("SELECT COUNT(*) FROM user_actions WHERE session_id=?", (sid,)).fetchone()[0]
+        self.conn.execute("INSERT INTO user_actions(session_id,seq,active_ms,action,phase) VALUES(?,?,?,?,?)", (sid, n, active_ms, action, phase))
+        self.conn.commit()
+
+    def get_user_actions(self, sid: str) -> list[dict]:
+        rows = self.conn.execute("SELECT seq,active_ms,action,phase FROM user_actions WHERE session_id=? ORDER BY seq", (sid,)).fetchall()
+        return [dict(r) for r in rows]
+
     # -- experiments
     def create_experiment(self, label: str, notes: str = "", expected: str = "", is_example: bool = False) -> str:
         eid = new_id()
@@ -250,7 +260,7 @@ class Database:
     # -- retention / deletion
     def counts(self) -> dict[str, int]:
         return {t: self.conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-                for t in ("sessions", "events", "experiments", "runs", "datasets", "features", "evaluation_results")}
+                for t in ("sessions", "events", "experiments", "runs", "datasets", "features", "evaluation_results", "user_actions")}
 
     def delete_all_research_data(self) -> None:
         """Removes experiments, their run sessions, imported sessions, datasets, features and evaluations.
